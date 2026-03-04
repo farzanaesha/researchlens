@@ -79,14 +79,36 @@ async function apiFetch(url){
 }
 
 async function searchPapers(q,type){
-  if(type==="doi"){const d=await apiFetch(`${S2}/paper/DOI:${encodeURIComponent(q)}?fields=${FIELDS}`);return d.paperId?[d]:[];}
+  if(type==="doi"){
+    const d=await apiFetch(`${S2}/paper/DOI:${encodeURIComponent(q)}?fields=${FIELDS}`);
+    return d.paperId?[d]:[];
+  }
   if(type==="author"){
+    // search up to top 5 author matches and merge all their papers
     const a=await apiFetch(`${S2}/author/search?query=${encodeURIComponent(q)}&fields=authorId,name&limit=5`);
     if(!a.data?.length)return[];
-    const p=await apiFetch(`${S2}/author/${a.data[0].authorId}/papers?fields=${FIELDS}&limit=20`);
-    return p.data||[];
+    // fetch papers for each matched author in parallel
+    const allResults=await Promise.allSettled(
+      a.data.map(au=>apiFetch(`${S2}/author/${au.authorId}/papers?fields=${FIELDS}&limit=25`))
+    );
+    const merged=[];
+    const seen=new Set();
+    allResults.forEach(r=>{
+      if(r.status==="fulfilled")(r.value.data||[]).forEach(p=>{
+        if(p&&p.paperId&&!seen.has(p.paperId)){seen.add(p.paperId);merged.push(p);}
+      });
+    });
+    // also do a keyword search by author name to catch co-authored papers
+    try{
+      const kw=await apiFetch(`${S2}/paper/search?query=${encodeURIComponent(q)}&fields=${FIELDS}&limit=20`);
+      (kw.data||[]).forEach(p=>{
+        if(p&&p.paperId&&!seen.has(p.paperId)){seen.add(p.paperId);merged.push(p);}
+      });
+    }catch{}
+    // sort by citation count descending
+    return merged.sort((a,b)=>(b.citationCount||0)-(a.citationCount||0));
   }
-  const d=await apiFetch(`${S2}/paper/search?query=${encodeURIComponent(q)}&fields=${FIELDS}&limit=20`);
+  const d=await apiFetch(`${S2}/paper/search?query=${encodeURIComponent(q)}&fields=${FIELDS}&limit=25`);
   return d.data||[];
 }
 
@@ -151,26 +173,45 @@ function PdfViewer({paper,onClose,onSave}){
         await task.promise;
         renderTask.current=null;
 
-        // build text layer for real text selection
+        // build text layer — precise positioning, no overlap
         const tl=textLayerRef.current;
         if(!tl)return;
         tl.innerHTML="";
         tl.style.width=vp.width+"px";
         tl.style.height=vp.height+"px";
         const tc=await pg.getTextContent();
+        const canvasW=vp.width,canvasH=vp.height;
         tc.items.forEach(item=>{
-          if(!item.str)return;
+          if(!item.str||!item.str.trim())return;
+          // apply viewport transform to get canvas coords
           const tx=pdfjsLib.Util.transform(vp.transform,item.transform);
+          // tx = [scaleX, skewY, skewX, scaleY, translateX, translateY]
+          const angle=Math.atan2(tx[1],tx[0]);
+          const scaleX=Math.sqrt(tx[0]*tx[0]+tx[1]*tx[1]);
+          const scaleY=Math.sqrt(tx[2]*tx[2]+tx[3]*tx[3]);
+          const fh=Math.abs(scaleY)||12;
+          const fw=item.width*scaleX;
+          const x=tx[4];
+          const y=tx[5]-fh; // top of glyph
+          // clamp to canvas bounds — prevents overflow bleed into neighbour lines
+          if(x<0||y<0||x>canvasW||y>canvasH)return;
           const span=document.createElement("span");
           span.textContent=item.str;
-          const angle=Math.atan2(tx[1],tx[0]);
-          const fw=item.width*vp.scale;
-          const fh=item.height*vp.scale||12;
+          // use explicit width + scaleX only if width is reasonable
+          const charW=item.str.length>0?fw/item.str.length:fh*0.6;
+          const naturalW=item.str.length*charW;
+          const sx=naturalW>0&&fw>0?fw/naturalW:1;
           span.style.cssText=`
-            left:${tx[4]}px;top:${tx[5]-fh}px;
+            left:${x}px;
+            top:${y}px;
             font-size:${fh}px;
+            line-height:${fh}px;
+            height:${fh}px;
             width:${fw>0?fw+"px":"auto"};
-            transform:rotate(${angle}rad) scaleX(${item.width>0?(fw/(item.str.length*(fh*0.6))||1):1});
+            transform:rotate(${angle}rad) scaleX(${Math.min(Math.max(sx,0.1),4)});
+            transform-origin:0% 0%;
+            white-space:pre;
+            overflow:hidden;
           `;
           tl.appendChild(span);
         });
