@@ -95,7 +95,7 @@ async function getRelated(id){
   return(d.data||[]).map(x=>x.citedPaper).filter(Boolean);
 }
 
-// ── PDF Viewer (pdf.js canvas renderer) ──────────────────────────────────
+// ── PDF Viewer ────────────────────────────────────────────────────────────
 function PdfViewer({paper,onClose,onSave}){
   const url=paper.openAccessPdf?.url;
   const paperId=paper.paperId;
@@ -110,37 +110,38 @@ function PdfViewer({paper,onClose,onSave}){
   const [err,setErr]=useState("");
   const [saved,setSaved]=useState(false);
   const canvasRef=useRef(null);
+  const textLayerRef=useRef(null);
   const renderTask=useRef(null);
+  const pageRef=useRef(null);
 
-  // persist highlights whenever they change
+  // save highlights to localStorage whenever they change
   useEffect(()=>{LS.set(HL_KEY(paperId),highlights);},[highlights,paperId]);
 
-  // load pdf
+  // load PDF with proxy fallback
   useEffect(()=>{
-    if(!url){setErr("No PDF URL available for this paper.");setLoading(false);return;}
+    if(!url){setErr("No PDF URL for this paper.");setLoading(false);return;}
     setLoading(true);setErr("");
-    // try direct first, then CORS proxy
-    const tryLoad=async()=>{
-      const attempts=[url,`https://corsproxy.io/?${encodeURIComponent(url)}`,`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`];
-      for(const u of attempts){
+    (async()=>{
+      const tries=[url,`https://corsproxy.io/?${encodeURIComponent(url)}`,`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`];
+      for(const u of tries){
         try{
           const doc=await pdfjsLib.getDocument({url:u,cMapUrl:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/",cMapPacked:true}).promise;
           setPdfDoc(doc);setTotal(doc.numPages);setLoading(false);return;
         }catch{}
       }
-      setErr("Could not load PDF — the publisher may restrict direct access. Try opening externally.");
+      setErr("Publisher restricts direct access. Use External Viewer.");
       setLoading(false);
-    };
-    tryLoad();
+    })();
   },[url]);
 
-  // render page
+  // render canvas + text layer on page/scale change
   useEffect(()=>{
     if(!pdfDoc||!canvasRef.current)return;
     if(renderTask.current){renderTask.current.cancel();renderTask.current=null;}
     (async()=>{
       try{
         const pg=await pdfDoc.getPage(page);
+        pageRef.current=pg;
         const vp=pg.getViewport({scale});
         const canvas=canvasRef.current;
         canvas.width=vp.width;canvas.height=vp.height;
@@ -149,139 +150,209 @@ function PdfViewer({paper,onClose,onSave}){
         renderTask.current=task;
         await task.promise;
         renderTask.current=null;
+
+        // build text layer for real text selection
+        const tl=textLayerRef.current;
+        if(!tl)return;
+        tl.innerHTML="";
+        tl.style.width=vp.width+"px";
+        tl.style.height=vp.height+"px";
+        const tc=await pg.getTextContent();
+        tc.items.forEach(item=>{
+          if(!item.str)return;
+          const tx=pdfjsLib.Util.transform(vp.transform,item.transform);
+          const span=document.createElement("span");
+          span.textContent=item.str;
+          const angle=Math.atan2(tx[1],tx[0]);
+          const fw=item.width*vp.scale;
+          const fh=item.height*vp.scale||12;
+          span.style.cssText=`
+            left:${tx[4]}px;top:${tx[5]-fh}px;
+            font-size:${fh}px;
+            width:${fw>0?fw+"px":"auto"};
+            transform:rotate(${angle}rad) scaleX(${item.width>0?(fw/(item.str.length*(fh*0.6))||1):1});
+          `;
+          tl.appendChild(span);
+        });
       }catch(e){if(e.name!=="RenderingCancelledException")console.warn(e);}
     })();
   },[pdfDoc,page,scale]);
 
-  const addHighlight=()=>{
+  // capture text selection as highlight
+  const captureHighlight=useCallback(()=>{
+    if(!hlMode)return;
     const sel=window.getSelection();
-    if(!sel||sel.isCollapsed||!sel.toString().trim())return;
+    if(!sel||sel.isCollapsed)return;
     const text=sel.toString().trim();
-    const hl={id:Date.now(),text,color:hlColor,page,note:""};
-    setHighlights(h=>{const prev=h[page]||[];return{...h,[page]:[...prev,hl]};});
+    if(!text)return;
+
+    // get bounding rect relative to text layer
+    const tl=textLayerRef.current;
+    if(!tl)return;
+    const tlRect=tl.getBoundingClientRect();
+    const rects=[];
+    for(let i=0;i<sel.rangeCount;i++){
+      const range=sel.getRangeAt(i);
+      const crs=range.getClientRects();
+      for(const r of crs){
+        rects.push({
+          top:((r.top-tlRect.top)/tlRect.height)*100,
+          left:((r.left-tlRect.left)/tlRect.width)*100,
+          width:(r.width/tlRect.width)*100,
+          height:(r.height/tlRect.height)*100,
+        });
+      }
+    }
+    if(!rects.length)return;
+    const hl={id:Date.now(),text,color:hlColor,page,rects};
+    setHighlights(h=>({...h,[page]:[...(h[page]||[]),hl]}));
     sel.removeAllRanges();
-  };
+  },[hlMode,hlColor,page]);
 
-  const removeHighlight=(pg,id)=>{
-    setHighlights(h=>{const prev=(h[pg]||[]).filter(x=>x.id!==id);return{...h,[pg]:prev};});
-  };
-
-  const handleSave=()=>{onSave();setSaved(true);setTimeout(()=>setSaved(false),2000);};
-
+  const removeHighlight=(pg,id)=>setHighlights(h=>({...h,[pg]:(h[pg]||[]).filter(x=>x.id!==id)}));
+  const handleSave=()=>{onSave();setSaved(true);setTimeout(()=>setSaved(false),2200);};
   const pageHls=highlights[page]||[];
 
   return(
-    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(10,15,35,0.8)",display:"flex",alignItems:"stretch",justifyContent:"center"}}>
-      <div style={{width:"100%",maxWidth:1200,margin:"16px",background:"#fff",borderRadius:16,overflow:"hidden",boxShadow:"0 30px 70px rgba(0,0,0,0.4)",display:"flex",flexDirection:"column"}}>
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(10,15,35,0.82)",display:"flex",alignItems:"stretch",justifyContent:"center"}}>
+      <div style={{width:"100%",maxWidth:1280,margin:"14px",background:"#fff",borderRadius:16,overflow:"hidden",boxShadow:"0 30px 80px rgba(0,0,0,0.45)",display:"flex",flexDirection:"column"}}>
 
-        {/* toolbar */}
-        <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",background:"#1e1b4b",flexShrink:0,flexWrap:"wrap"}}>
-          <span style={{color:"#e0e7ff",fontWeight:800,fontSize:15}}>📄 {(paper.title||"PDF Viewer").slice(0,50)}</span>
+        {/* ── toolbar ── */}
+        <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 14px",background:"#1e1b4b",flexShrink:0,flexWrap:"wrap"}}>
+          <span style={{color:"#e0e7ff",fontWeight:800,fontSize:14,maxWidth:320,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            📄 {paper.title||"PDF Viewer"}
+          </span>
           <div style={{flex:1}}/>
-          {/* highlight colors */}
-          <span style={{color:"#a5b4fc",fontSize:12}}>Highlight:</span>
+          {/* colors */}
+          <span style={{color:"#a5b4fc",fontSize:11.5}}>Highlight:</span>
           {COLORS.map(c=>(
-            <button key={c} onClick={()=>{setHlColor(c);setHlMode(true);}}
-              title="Select color"
-              style={{width:22,height:22,borderRadius:"50%",background:c,border:hlColor===c&&hlMode?"3px solid #fff":"2px solid transparent",cursor:"pointer",flexShrink:0}}/>
+            <button key={c} onClick={()=>{setHlColor(c);setHlMode(true);}} title={c}
+              style={{width:22,height:22,borderRadius:"50%",background:c,
+                border:hlColor===c&&hlMode?"3px solid #fff":"2px solid rgba(255,255,255,0.2)",
+                cursor:"pointer",flexShrink:0,transition:"transform 0.1s"}}
+              onMouseEnter={e=>e.currentTarget.style.transform="scale(1.25)"}
+              onMouseLeave={e=>e.currentTarget.style.transform=""}/>
           ))}
           <button onClick={()=>setHlMode(m=>!m)}
-            style={{background:hlMode?"#6366f1":"#3730a3",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-            <HlIcon/>{hlMode?"Highlight ON":"Highlight OFF"}
+            style={{background:hlMode?"#6366f1":"#3730a3",color:"#fff",border:"none",borderRadius:8,
+              padding:"6px 11px",fontSize:12,fontWeight:700,cursor:"pointer",
+              display:"flex",alignItems:"center",gap:4,
+              boxShadow:hlMode?"0 0 0 2px #a5b4fc":"none"}}>
+            <HlIcon/>{hlMode?"ON":"OFF"}
           </button>
           {/* page nav */}
           <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page<=1}
-            style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"5px 9px",cursor:"pointer",opacity:page<=1?0.4:1}}><ChevL/></button>
-          <span style={{color:"#e0e7ff",fontSize:13,minWidth:80,textAlign:"center"}}>{total?`${page} / ${total}`:"-"}</span>
+            style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"5px 8px",cursor:"pointer",opacity:page<=1?0.35:1}}><ChevL/></button>
+          <span style={{color:"#e0e7ff",fontSize:12.5,minWidth:72,textAlign:"center"}}>{total?`${page} / ${total}`:"-"}</span>
           <button onClick={()=>setPage(p=>Math.min(total,p+1))} disabled={page>=total}
-            style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"5px 9px",cursor:"pointer",opacity:page>=total?0.4:1}}><ChevR/></button>
+            style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"5px 8px",cursor:"pointer",opacity:page>=total?0.35:1}}><ChevR/></button>
           {/* zoom */}
-          <button onClick={()=>setScale(s=>Math.max(0.6,s-0.2))} style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:15}}>−</button>
-          <span style={{color:"#e0e7ff",fontSize:12}}>{Math.round(scale*100)}%</span>
-          <button onClick={()=>setScale(s=>Math.min(3,s+0.2))} style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:15}}>+</button>
+          <button onClick={()=>setScale(s=>+(Math.max(0.6,s-0.2)).toFixed(1))} style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:16,lineHeight:1}}>−</button>
+          <span style={{color:"#e0e7ff",fontSize:12,minWidth:38,textAlign:"center"}}>{Math.round(scale*100)}%</span>
+          <button onClick={()=>setScale(s=>+(Math.min(3,s+0.2)).toFixed(1))} style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:16,lineHeight:1}}>+</button>
           {/* actions */}
-          <button onClick={()=>window.open(url,"_blank")}
-            style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-            <ExtIcon/>External
-          </button>
-          <button onClick={handleSave}
-            style={{background:saved?"#059669":"#065f46",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-            <SaveIcon/>{saved?"Saved!":"Save Paper"}
-          </button>
-          <button onClick={onClose}
-            style={{background:"#ef4444",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-            <CloseIcon/>Close
-          </button>
+          {[
+            ["#4f46e5",()=>window.open(url,"_blank"),<><ExtIcon/>External</>],
+            [saved?"#059669":"#065f46",handleSave,<><SaveIcon/>{saved?"Saved!":"Save"}</>],
+            ["#ef4444",onClose,<><CloseIcon/>Close</>],
+          ].map(([bg,fn,ch],i)=>(
+            <button key={i} onClick={fn}
+              style={{background:bg,color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              {ch}
+            </button>
+          ))}
         </div>
 
-        {/* body */}
+        {/* ── body ── */}
         <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-          {/* canvas area */}
-          <div style={{flex:1,overflowY:"auto",overflowX:"auto",background:"#e5e7eb",padding:24,display:"flex",justifyContent:"center",alignItems:"flex-start"}}
-            onMouseUp={hlMode?addHighlight:undefined}>
+
+          {/* PDF canvas + text layer */}
+          <div style={{flex:1,overflowY:"auto",overflowX:"auto",background:"#6b7280",padding:24,display:"flex",justifyContent:"center",alignItems:"flex-start"}}
+            onMouseUp={captureHighlight}>
             {loading&&(
-              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:14,marginTop:80}}>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:14,marginTop:100}}>
                 <div className="spinner"/>
-                <p style={{color:"#6366f1",fontWeight:600}}>Loading PDF…</p>
+                <p style={{color:"#e0e7ff",fontWeight:600}}>Loading PDF…</p>
               </div>
             )}
             {err&&(
-              <div style={{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:12,padding:24,maxWidth:480,margin:"60px auto",textAlign:"center"}}>
+              <div style={{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:12,padding:28,maxWidth:460,margin:"60px auto",textAlign:"center"}}>
                 <WarnIcon/>
-                <p style={{fontWeight:700,color:"#9a3412",marginTop:8,marginBottom:6}}>{err}</p>
+                <p style={{fontWeight:700,color:"#9a3412",margin:"10px 0 6px"}}>{err}</p>
                 <button onClick={()=>window.open(url,"_blank")}
-                  style={{background:"#ea580c",color:"#fff",border:"none",borderRadius:8,padding:"8px 18px",fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,marginTop:8}}>
-                  <ExtIcon/>Open in External Viewer
+                  style={{background:"#ea580c",color:"#fff",border:"none",borderRadius:8,padding:"9px 20px",fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,marginTop:8}}>
+                  <ExtIcon/>Open Externally
                 </button>
               </div>
             )}
             {!loading&&!err&&(
-              <div className="pdf-page-wrap">
+              <div style={{position:"relative",boxShadow:"0 4px 24px rgba(0,0,0,0.3)",background:"#fff",display:"inline-block"}}>
                 <canvas ref={canvasRef}/>
-                {/* highlights overlay */}
-                {pageHls.length>0&&(
-                  <div className="hl-layer">
-                    {pageHls.map(h=>(
-                      <div key={h.id} title={`"${h.text}" — click to remove`}
+                {/* real text layer — enables actual text selection */}
+                <div ref={textLayerRef} className="text-layer"
+                  style={{cursor:hlMode?"text":"default",
+                    userSelect:hlMode?"text":"none",
+                    WebkitUserSelect:hlMode?"text":"none"}}/>
+                {/* highlight rectangles overlay */}
+                <div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none",overflow:"hidden"}}>
+                  {pageHls.map(h=>
+                    h.rects.map((r,ri)=>(
+                      <div key={`${h.id}-${ri}`}
+                        title={`"${h.text}" — click to remove`}
                         onClick={()=>removeHighlight(page,h.id)}
-                        style={{position:"absolute",top:`${(h.id%97)/100*80}%`,left:"5%",width:"90%",height:"1.4em",background:h.color,opacity:0.4,cursor:"pointer",borderRadius:2}}/>
-                    ))}
-                  </div>
-                )}
+                        style={{position:"absolute",
+                          top:r.top+"%",left:r.left+"%",
+                          width:r.width+"%",height:r.height+"%",
+                          background:h.color,opacity:0.45,
+                          borderRadius:2,pointerEvents:"auto",cursor:"pointer"}}/>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>
 
           {/* highlights sidebar */}
-          <div style={{width:240,background:"#f8faff",borderLeft:"1px solid #e0e7ff",overflowY:"auto",flexShrink:0}}>
-            <div style={{padding:"14px 14px 8px",borderBottom:"1px solid #e0e7ff"}}>
-              <span style={{fontWeight:700,fontSize:13,color:"#1e1b4b"}}>📌 Highlights</span>
-              <span style={{marginLeft:6,background:"#eef2ff",color:"#4f46e5",borderRadius:20,padding:"1px 8px",fontSize:11,fontWeight:700}}>
+          <div style={{width:230,background:"#f8faff",borderLeft:"1px solid #e0e7ff",overflowY:"auto",flexShrink:0,display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"13px 13px 9px",borderBottom:"1px solid #e0e7ff",display:"flex",alignItems:"center",gap:7}}>
+              <span style={{fontWeight:800,fontSize:13,color:"#1e1b4b"}}>📌 Highlights</span>
+              <span style={{background:"#eef2ff",color:"#4f46e5",borderRadius:20,padding:"1px 8px",fontSize:11,fontWeight:700}}>
                 {Object.values(highlights).flat().length}
               </span>
             </div>
-            {Object.entries(highlights).length===0&&(
-              <p style={{padding:14,fontSize:12,color:"#9ca3af",lineHeight:1.6}}>
-                Turn on Highlight mode, then select text to add highlights. They are saved automatically.
+            {Object.values(highlights).flat().length===0&&(
+              <p style={{padding:14,fontSize:11.5,color:"#9ca3af",lineHeight:1.65}}>
+                1. Pick a color above<br/>
+                2. Click <b>Highlight OFF → ON</b><br/>
+                3. Select any text in the PDF<br/>
+                4. Release — highlight is saved!
               </p>
             )}
             {Object.entries(highlights).map(([pg,hls])=>hls.map(h=>(
-              <div key={h.id} style={{padding:"10px 12px",borderBottom:"1px solid #e0e7ff",position:"relative"}}>
-                <div style={{width:10,height:10,borderRadius:"50%",background:h.color,display:"inline-block",marginRight:6,border:"1px solid #e0e7ff",verticalAlign:"middle"}}/>
-                <span style={{fontSize:10,color:"#6b7280"}}>Page {pg}</span>
-                <p style={{margin:"4px 0 0",fontSize:12,color:"#374151",lineHeight:1.5,borderLeft:`3px solid ${h.color}`,paddingLeft:8}}>{h.text.slice(0,100)}{h.text.length>100?"…":""}</p>
-                <button onClick={()=>removeHighlight(Number(pg),h.id)}
-                  style={{position:"absolute",top:8,right:8,background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,lineHeight:1}}>×</button>
+              <div key={h.id} style={{padding:"9px 11px",borderBottom:"1px solid #f1f5f9",position:"relative",cursor:"pointer",transition:"background 0.15s"}}
+                onMouseEnter={e=>e.currentTarget.style.background="#f1f5f9"}
+                onMouseLeave={e=>e.currentTarget.style.background=""}>
+                <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
+                  <div style={{width:9,height:9,borderRadius:"50%",background:h.color,flexShrink:0}}/>
+                  <span style={{fontSize:10,color:"#6b7280",fontWeight:600}}>Page {pg}</span>
+                  <button onClick={()=>removeHighlight(Number(pg),h.id)}
+                    style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:15,lineHeight:1,padding:0}}>×</button>
+                </div>
+                <p style={{margin:0,fontSize:11.5,color:"#374151",lineHeight:1.5,borderLeft:`3px solid ${h.color}`,paddingLeft:7}}>
+                  {h.text.slice(0,110)}{h.text.length>110?"…":""}
+                </p>
               </div>
             )))}
           </div>
         </div>
 
-        {hlMode&&(
-          <div style={{background:"#1e1b4b",color:"#c7d2fe",fontSize:12,padding:"6px 18px",textAlign:"center"}}>
-            ✏️ Highlight mode ON — select text on the PDF canvas, then release to save highlight
-          </div>
-        )}
+        {/* status bar */}
+        <div style={{background:"#1e1b4b",padding:"5px 16px",display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:hlMode?"#4ade80":"#6b7280",transition:"background 0.3s"}}/>
+          <span style={{color:"#c7d2fe",fontSize:11.5}}>
+            {hlMode?"✏️ Highlight mode ON — select text then release to save":"Highlight mode OFF — click ON to start highlighting"}
+          </span>
+        </div>
       </div>
     </div>
   );
