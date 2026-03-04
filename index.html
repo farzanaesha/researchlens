@@ -1,105 +1,293 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>ResearchLens</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-  <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',system-ui,sans-serif;background:#fff;color:#1e1b4b}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
-    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .card{animation:fadeIn .3s ease both}
-    .spinner{width:36px;height:36px;border:3px solid #e0e7ff;border-top-color:#6366f1;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
-    ::-webkit-scrollbar{width:6px}
-    ::-webkit-scrollbar-track{background:#f1f5f9}
-    ::-webkit-scrollbar-thumb{background:#c7d2fe;border-radius:10px}
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ResearchLens</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:#fff;color:#1e1b4b}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.card{animation:fadeIn .3s ease both}
+.spinner{width:36px;height:36px;border:3px solid #e0e7ff;border-top-color:#6366f1;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#f1f5f9}
+::-webkit-scrollbar-thumb{background:#c7d2fe;border-radius:10px}
+.pdf-page-wrap{position:relative;margin-bottom:12px;display:inline-block;box-shadow:0 2px 12px rgba(0,0,0,0.12)}
+.pdf-page-wrap canvas{display:block}
+.hl-layer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+.hl-rect{position:absolute;border-radius:2px;opacity:0.38;pointer-events:auto;cursor:pointer}
+.text-layer{position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden;user-select:text;line-height:1}
+.text-layer span{position:absolute;color:transparent;cursor:text;transform-origin:0% 0%}
+</style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect,useRef} = React;
+const {useState,useEffect,useRef,useCallback}=React;
 
-// ── Icons ──────────────────────────────────────────────────────────────────
+// ── pdf.js worker ─────────────────────────────────────────────────────────
+pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+// ── Icons ─────────────────────────────────────────────────────────────────
 const Ic=({d,s=18,c="currentColor",...p})=>(
-  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <path d={d}/>
-  </svg>
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}><path d={d}/></svg>
 );
-const SearchIcon =()=><Ic d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>;
-const FolderIcon =()=><Ic d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>;
-const BookIcon   =()=><Ic d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z"/>;
-const ExtIcon    =()=><Ic d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>;
-const HlIcon     =()=><Ic d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>;
-const MapIcon    =()=><Ic d="M3 11l19-9-9 19-2-8-8-2z"/>;
-const SaveIcon   =()=><Ic d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"/>;
-const CloseIcon  =()=><Ic d="M18 6L6 18M6 6l12 12"/>;
-const GraphIcon  =()=><Ic d="M18 20V10M12 20V4M6 20v-6"/>;
-const TrashIcon  =()=><Ic d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" s={15}/>;
-const LockOpen   =()=><Ic d="M7 11V7a5 5 0 0 1 9.9-1M21 21H3V11h18v10z" s={13}/>;
-const PdfIc      =()=><Ic d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" s={13}/>;
-const WarnIcon   =()=><Ic d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" s={20}/>;
+const SearchIcon=()=><Ic d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>;
+const BookIcon  =()=><Ic d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z"/>;
+const ExtIcon   =()=><Ic d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>;
+const HlIcon    =()=><Ic d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>;
+const MapIcon   =()=><Ic d="M3 11l19-9-9 19-2-8-8-2z"/>;
+const SaveIcon  =()=><Ic d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"/>;
+const CloseIcon =()=><Ic d="M18 6L6 18M6 6l12 12"/>;
+const GraphIcon =()=><Ic d="M18 20V10M12 20V4M6 20v-6"/>;
+const TrashIcon =()=><Ic d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" s={15}/>;
+const LockOpen  =()=><Ic d="M7 11V7a5 5 0 0 1 9.9-1M21 21H3V11h18v10z" s={13}/>;
+const PdfIc     =()=><Ic d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" s={13}/>;
+const WarnIcon  =()=><Ic d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" s={20}/>;
+const ChevL     =()=><Ic d="M15 18l-6-6 6-6" s={16}/>;
+const ChevR     =()=><Ic d="M9 18l6-6-6-6" s={16}/>;
 
-// ── Storage ────────────────────────────────────────────────────────────────
+// ── Storage helpers ───────────────────────────────────────────────────────
 const LS={
-  get:k=>{try{return JSON.parse(localStorage.getItem(k))||[];}catch{return[];}},
+  get:(k,def=[])=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch{return def;}},
   set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
 };
+const HL_KEY=id=>`rl_hl_${id}`;
 const COLORS=["#FDE68A","#BBF7D0","#BFDBFE","#FCA5A5","#DDD6FE"];
 
-// ── API with proxy fallback ────────────────────────────────────────────────
+// ── API ───────────────────────────────────────────────────────────────────
 const FIELDS="paperId,title,authors,year,citationCount,referenceCount,openAccessPdf,externalIds,abstract,fieldsOfStudy";
-const S2_BASE="https://api.semanticscholar.org/graph/v1";
-// CORS proxy fallbacks (tried in order if direct fails)
-const PROXIES=[
-  url=>url,
-  url=>`https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url=>`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-];
+const S2="https://api.semanticscholar.org/graph/v1";
+const PROXIES=[u=>u,u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`];
 
-async function fetchWithFallback(url){
-  for(const proxy of PROXIES){
+async function apiFetch(url){
+  for(const px of PROXIES){
     try{
-      const r=await fetch(proxy(url),{headers:{"Content-Type":"application/json"}});
-      if(r.ok){
-        const txt=await r.text();
-        return JSON.parse(txt);
-      }
-    }catch(e){continue;}
+      const r=await fetch(px(url));
+      if(r.ok)return JSON.parse(await r.text());
+    }catch{}
   }
-  throw new Error("All fetch attempts failed");
+  throw new Error("API unreachable");
 }
 
-async function searchPapers(query,type){
-  let url;
-  if(type==="doi"){
-    url=`${S2_BASE}/paper/DOI:${encodeURIComponent(query)}?fields=${FIELDS}`;
-    const d=await fetchWithFallback(url);
-    return d.paperId?[d]:[];
-  }
+async function searchPapers(q,type){
+  if(type==="doi"){const d=await apiFetch(`${S2}/paper/DOI:${encodeURIComponent(q)}?fields=${FIELDS}`);return d.paperId?[d]:[];}
   if(type==="author"){
-    const au=await fetchWithFallback(`${S2_BASE}/author/search?query=${encodeURIComponent(query)}&fields=authorId,name&limit=5`);
-    if(!au.data?.length) return [];
-    const pd=await fetchWithFallback(`${S2_BASE}/author/${au.data[0].authorId}/papers?fields=${FIELDS}&limit=20`);
-    return pd.data||[];
+    const a=await apiFetch(`${S2}/author/search?query=${encodeURIComponent(q)}&fields=authorId,name&limit=5`);
+    if(!a.data?.length)return[];
+    const p=await apiFetch(`${S2}/author/${a.data[0].authorId}/papers?fields=${FIELDS}&limit=20`);
+    return p.data||[];
   }
-  const d=await fetchWithFallback(`${S2_BASE}/paper/search?query=${encodeURIComponent(query)}&fields=${FIELDS}&limit=20`);
+  const d=await apiFetch(`${S2}/paper/search?query=${encodeURIComponent(q)}&fields=${FIELDS}&limit=20`);
   return d.data||[];
 }
 
-async function getRelated(paperId){
-  const d=await fetchWithFallback(`${S2_BASE}/paper/${paperId}/references?fields=${FIELDS}&limit=15`);
+async function getRelated(id){
+  const d=await apiFetch(`${S2}/paper/${id}/references?fields=${FIELDS}&limit=15`);
   return(d.data||[]).map(x=>x.citedPaper).filter(Boolean);
 }
 
-// ── Force Graph ────────────────────────────────────────────────────────────
+// ── PDF Viewer (pdf.js canvas renderer) ──────────────────────────────────
+function PdfViewer({paper,onClose,onSave}){
+  const url=paper.openAccessPdf?.url;
+  const paperId=paper.paperId;
+  const [pdfDoc,setPdfDoc]=useState(null);
+  const [page,setPage]=useState(1);
+  const [total,setTotal]=useState(0);
+  const [scale,setScale]=useState(1.4);
+  const [hlColor,setHlColor]=useState("#FDE68A");
+  const [hlMode,setHlMode]=useState(false);
+  const [highlights,setHighlights]=useState(()=>LS.get(HL_KEY(paperId),{}));
+  const [loading,setLoading]=useState(true);
+  const [err,setErr]=useState("");
+  const [saved,setSaved]=useState(false);
+  const canvasRef=useRef(null);
+  const renderTask=useRef(null);
+
+  // persist highlights whenever they change
+  useEffect(()=>{LS.set(HL_KEY(paperId),highlights);},[highlights,paperId]);
+
+  // load pdf
+  useEffect(()=>{
+    if(!url){setErr("No PDF URL available for this paper.");setLoading(false);return;}
+    setLoading(true);setErr("");
+    // try direct first, then CORS proxy
+    const tryLoad=async()=>{
+      const attempts=[url,`https://corsproxy.io/?${encodeURIComponent(url)}`,`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`];
+      for(const u of attempts){
+        try{
+          const doc=await pdfjsLib.getDocument({url:u,cMapUrl:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/",cMapPacked:true}).promise;
+          setPdfDoc(doc);setTotal(doc.numPages);setLoading(false);return;
+        }catch{}
+      }
+      setErr("Could not load PDF — the publisher may restrict direct access. Try opening externally.");
+      setLoading(false);
+    };
+    tryLoad();
+  },[url]);
+
+  // render page
+  useEffect(()=>{
+    if(!pdfDoc||!canvasRef.current)return;
+    if(renderTask.current){renderTask.current.cancel();renderTask.current=null;}
+    (async()=>{
+      try{
+        const pg=await pdfDoc.getPage(page);
+        const vp=pg.getViewport({scale});
+        const canvas=canvasRef.current;
+        canvas.width=vp.width;canvas.height=vp.height;
+        const ctx=canvas.getContext("2d");
+        const task=pg.render({canvasContext:ctx,viewport:vp});
+        renderTask.current=task;
+        await task.promise;
+        renderTask.current=null;
+      }catch(e){if(e.name!=="RenderingCancelledException")console.warn(e);}
+    })();
+  },[pdfDoc,page,scale]);
+
+  const addHighlight=()=>{
+    const sel=window.getSelection();
+    if(!sel||sel.isCollapsed||!sel.toString().trim())return;
+    const text=sel.toString().trim();
+    const hl={id:Date.now(),text,color:hlColor,page,note:""};
+    setHighlights(h=>{const prev=h[page]||[];return{...h,[page]:[...prev,hl]};});
+    sel.removeAllRanges();
+  };
+
+  const removeHighlight=(pg,id)=>{
+    setHighlights(h=>{const prev=(h[pg]||[]).filter(x=>x.id!==id);return{...h,[pg]:prev};});
+  };
+
+  const handleSave=()=>{onSave();setSaved(true);setTimeout(()=>setSaved(false),2000);};
+
+  const pageHls=highlights[page]||[];
+
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(10,15,35,0.8)",display:"flex",alignItems:"stretch",justifyContent:"center"}}>
+      <div style={{width:"100%",maxWidth:1200,margin:"16px",background:"#fff",borderRadius:16,overflow:"hidden",boxShadow:"0 30px 70px rgba(0,0,0,0.4)",display:"flex",flexDirection:"column"}}>
+
+        {/* toolbar */}
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",background:"#1e1b4b",flexShrink:0,flexWrap:"wrap"}}>
+          <span style={{color:"#e0e7ff",fontWeight:800,fontSize:15}}>📄 {(paper.title||"PDF Viewer").slice(0,50)}</span>
+          <div style={{flex:1}}/>
+          {/* highlight colors */}
+          <span style={{color:"#a5b4fc",fontSize:12}}>Highlight:</span>
+          {COLORS.map(c=>(
+            <button key={c} onClick={()=>{setHlColor(c);setHlMode(true);}}
+              title="Select color"
+              style={{width:22,height:22,borderRadius:"50%",background:c,border:hlColor===c&&hlMode?"3px solid #fff":"2px solid transparent",cursor:"pointer",flexShrink:0}}/>
+          ))}
+          <button onClick={()=>setHlMode(m=>!m)}
+            style={{background:hlMode?"#6366f1":"#3730a3",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            <HlIcon/>{hlMode?"Highlight ON":"Highlight OFF"}
+          </button>
+          {/* page nav */}
+          <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page<=1}
+            style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"5px 9px",cursor:"pointer",opacity:page<=1?0.4:1}}><ChevL/></button>
+          <span style={{color:"#e0e7ff",fontSize:13,minWidth:80,textAlign:"center"}}>{total?`${page} / ${total}`:"-"}</span>
+          <button onClick={()=>setPage(p=>Math.min(total,p+1))} disabled={page>=total}
+            style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"5px 9px",cursor:"pointer",opacity:page>=total?0.4:1}}><ChevR/></button>
+          {/* zoom */}
+          <button onClick={()=>setScale(s=>Math.max(0.6,s-0.2))} style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:15}}>−</button>
+          <span style={{color:"#e0e7ff",fontSize:12}}>{Math.round(scale*100)}%</span>
+          <button onClick={()=>setScale(s=>Math.min(3,s+0.2))} style={{background:"#3730a3",color:"#fff",border:"none",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:15}}>+</button>
+          {/* actions */}
+          <button onClick={()=>window.open(url,"_blank")}
+            style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            <ExtIcon/>External
+          </button>
+          <button onClick={handleSave}
+            style={{background:saved?"#059669":"#065f46",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            <SaveIcon/>{saved?"Saved!":"Save Paper"}
+          </button>
+          <button onClick={onClose}
+            style={{background:"#ef4444",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            <CloseIcon/>Close
+          </button>
+        </div>
+
+        {/* body */}
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          {/* canvas area */}
+          <div style={{flex:1,overflowY:"auto",overflowX:"auto",background:"#e5e7eb",padding:24,display:"flex",justifyContent:"center",alignItems:"flex-start"}}
+            onMouseUp={hlMode?addHighlight:undefined}>
+            {loading&&(
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:14,marginTop:80}}>
+                <div className="spinner"/>
+                <p style={{color:"#6366f1",fontWeight:600}}>Loading PDF…</p>
+              </div>
+            )}
+            {err&&(
+              <div style={{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:12,padding:24,maxWidth:480,margin:"60px auto",textAlign:"center"}}>
+                <WarnIcon/>
+                <p style={{fontWeight:700,color:"#9a3412",marginTop:8,marginBottom:6}}>{err}</p>
+                <button onClick={()=>window.open(url,"_blank")}
+                  style={{background:"#ea580c",color:"#fff",border:"none",borderRadius:8,padding:"8px 18px",fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,marginTop:8}}>
+                  <ExtIcon/>Open in External Viewer
+                </button>
+              </div>
+            )}
+            {!loading&&!err&&(
+              <div className="pdf-page-wrap">
+                <canvas ref={canvasRef}/>
+                {/* highlights overlay */}
+                {pageHls.length>0&&(
+                  <div className="hl-layer">
+                    {pageHls.map(h=>(
+                      <div key={h.id} title={`"${h.text}" — click to remove`}
+                        onClick={()=>removeHighlight(page,h.id)}
+                        style={{position:"absolute",top:`${(h.id%97)/100*80}%`,left:"5%",width:"90%",height:"1.4em",background:h.color,opacity:0.4,cursor:"pointer",borderRadius:2}}/>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* highlights sidebar */}
+          <div style={{width:240,background:"#f8faff",borderLeft:"1px solid #e0e7ff",overflowY:"auto",flexShrink:0}}>
+            <div style={{padding:"14px 14px 8px",borderBottom:"1px solid #e0e7ff"}}>
+              <span style={{fontWeight:700,fontSize:13,color:"#1e1b4b"}}>📌 Highlights</span>
+              <span style={{marginLeft:6,background:"#eef2ff",color:"#4f46e5",borderRadius:20,padding:"1px 8px",fontSize:11,fontWeight:700}}>
+                {Object.values(highlights).flat().length}
+              </span>
+            </div>
+            {Object.entries(highlights).length===0&&(
+              <p style={{padding:14,fontSize:12,color:"#9ca3af",lineHeight:1.6}}>
+                Turn on Highlight mode, then select text to add highlights. They are saved automatically.
+              </p>
+            )}
+            {Object.entries(highlights).map(([pg,hls])=>hls.map(h=>(
+              <div key={h.id} style={{padding:"10px 12px",borderBottom:"1px solid #e0e7ff",position:"relative"}}>
+                <div style={{width:10,height:10,borderRadius:"50%",background:h.color,display:"inline-block",marginRight:6,border:"1px solid #e0e7ff",verticalAlign:"middle"}}/>
+                <span style={{fontSize:10,color:"#6b7280"}}>Page {pg}</span>
+                <p style={{margin:"4px 0 0",fontSize:12,color:"#374151",lineHeight:1.5,borderLeft:`3px solid ${h.color}`,paddingLeft:8}}>{h.text.slice(0,100)}{h.text.length>100?"…":""}</p>
+                <button onClick={()=>removeHighlight(Number(pg),h.id)}
+                  style={{position:"absolute",top:8,right:8,background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,lineHeight:1}}>×</button>
+              </div>
+            )))}
+          </div>
+        </div>
+
+        {hlMode&&(
+          <div style={{background:"#1e1b4b",color:"#c7d2fe",fontSize:12,padding:"6px 18px",textAlign:"center"}}>
+            ✏️ Highlight mode ON — select text on the PDF canvas, then release to save highlight
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Force Graph ───────────────────────────────────────────────────────────
 function ForceGraph({center,related,onSelect}){
   const animRef=useRef(null);
   const [nodes,setNodes]=useState([]);
@@ -118,11 +306,11 @@ function ForceGraph({center,related,onSelect}){
     let ns=all.map(n=>({...n}));
     const tick=()=>{
       for(let i=0;i<3;i++){
-        ns.forEach((a,ai)=>{ns.forEach((b,bi)=>{
+        ns.forEach((a,ai)=>ns.forEach((b,bi)=>{
           if(ai===bi)return;
           const dx=a.x-b.x,dy=a.y-b.y,d=Math.sqrt(dx*dx+dy*dy)||1,f=2200/(d*d);
           a.vx+=f*dx/d;a.vy+=f*dy/d;
-        });});
+        }));
         el.forEach(e=>{
           const a=ns.find(n=>n.id===e.s),b=ns.find(n=>n.id===e.t);
           if(!a||!b)return;
@@ -158,15 +346,15 @@ function ForceGraph({center,related,onSelect}){
   );
 }
 
-// ── MindMap ────────────────────────────────────────────────────────────────
+// ── MindMap ───────────────────────────────────────────────────────────────
 function MindMap({paper}){
-  const sections=[
-    {label:"Title",    children:[(paper.title||"").slice(0,38)+"…"]},
-    {label:"Authors",  children:(paper.authors||[]).slice(0,4).map(a=>a.name)},
-    {label:"Fields",   children:paper.fieldsOfStudy||["General"]},
-    {label:"Abstract", children:[(paper.abstract||"N/A").slice(0,65)+"…"]},
-    {label:"Citations",children:[`Cited ${paper.citationCount||0}x`,`${paper.referenceCount||0} refs`]},
-    {label:"Year",     children:[String(paper.year||"?")]},
+  const s=[
+    {label:"Title",    ch:[(paper.title||"").slice(0,36)+"…"]},
+    {label:"Authors",  ch:(paper.authors||[]).slice(0,4).map(a=>a.name)},
+    {label:"Fields",   ch:paper.fieldsOfStudy||["General"]},
+    {label:"Abstract", ch:[(paper.abstract||"N/A").slice(0,60)+"…"]},
+    {label:"Citations",ch:[`Cited ${paper.citationCount||0}x`,`${paper.referenceCount||0} refs`]},
+    {label:"Year",     ch:[String(paper.year||"?")]},
   ];
   const cx=300,cy=200;
   return(
@@ -175,15 +363,15 @@ function MindMap({paper}){
       <circle cx={cx} cy={cy} r={38} fill="url(#mg)"/>
       <text x={cx} y={cy-4} textAnchor="middle" fontSize={8} fill="#fff" fontWeight="bold">PAPER</text>
       <text x={cx} y={cy+8} textAnchor="middle" fontSize={6} fill="#c7d2fe">MIND MAP</text>
-      {sections.map((s,i)=>{
-        const angle=(2*Math.PI*i)/sections.length-Math.PI/2;
+      {s.map((sec,i)=>{
+        const angle=(2*Math.PI*i)/s.length-Math.PI/2;
         const nx=cx+92*Math.cos(angle),ny=cy+92*Math.sin(angle);
         return(
           <g key={i}>
             <line x1={cx+38*Math.cos(angle)} y1={cy+38*Math.sin(angle)} x2={nx} y2={ny} stroke="#a5b4fc" strokeWidth={1.5}/>
             <circle cx={nx} cy={ny} r={22} fill="#e0e7ff" stroke="#6366f1" strokeWidth={1.5}/>
-            <text x={nx} y={ny+4} textAnchor="middle" fontSize={6.5} fill="#3730a3" fontWeight="700">{s.label}</text>
-            {s.children.slice(0,2).map((c,ci)=>{
+            <text x={nx} y={ny+4} textAnchor="middle" fontSize={6.5} fill="#3730a3" fontWeight="700">{sec.label}</text>
+            {sec.ch.slice(0,2).map((c,ci)=>{
               const ca=angle+(ci-0.5)*0.45,lx=nx+58*Math.cos(ca),ly=ny+44*Math.sin(ca);
               return(<g key={ci}>
                 <line x1={nx+22*Math.cos(ca)} y1={ny+22*Math.sin(ca)} x2={lx} y2={ly} stroke="#c7d2fe" strokeWidth={1}/>
@@ -198,47 +386,11 @@ function MindMap({paper}){
   );
 }
 
-// ── PDF Viewer ─────────────────────────────────────────────────────────────
-function PdfViewer({url,onClose,onSave}){
-  const [hlColor,setHlColor]=useState("#FDE68A");
-  const [hlMode,setHlMode]=useState(false);
-  const proxy=`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(url)}`;
-  return(
-    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(10,15,35,0.75)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{width:"93vw",height:"93vh",background:"#fff",borderRadius:16,overflow:"hidden",boxShadow:"0 30px 70px rgba(0,0,0,0.35)",display:"flex",flexDirection:"column"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",background:"#1e1b4b",flexShrink:0,flexWrap:"wrap"}}>
-          <span style={{color:"#e0e7ff",fontWeight:800,fontSize:15,flex:1}}>📄 PDF Viewer</span>
-          <span style={{color:"#a5b4fc",fontSize:12}}>Highlight:</span>
-          {COLORS.map(c=>(
-            <button key={c} onClick={()=>{setHlColor(c);setHlMode(true);}}
-              style={{width:20,height:20,borderRadius:"50%",background:c,border:hlColor===c&&hlMode?"2.5px solid #fff":"2px solid transparent",cursor:"pointer"}}/>
-          ))}
-          {[
-            [hlMode?"#6366f1":"#3730a3","#fff",()=>setHlMode(!hlMode),<><HlIcon/>{hlMode?"Highlight ON":"Highlight"}</>],
-            ["#4f46e5","#fff",()=>window.open(url,"_blank"),<><ExtIcon/>External</>],
-            ["#059669","#fff",onSave,<><SaveIcon/>Save</>],
-            ["#ef4444","#fff",onClose,<><CloseIcon/>Close</>],
-          ].map(([bg,c,fn,ch],i)=>(
-            <button key={i} onClick={fn} style={{background:bg,color:c,border:"none",borderRadius:8,padding:"6px 13px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{ch}</button>
-          ))}
-        </div>
-        <iframe src={proxy} style={{flex:1,border:"none"}} title="PDF Viewer"/>
-      </div>
-    </div>
-  );
-}
-
-// ── Paper Card ─────────────────────────────────────────────────────────────
+// ── Paper Card ────────────────────────────────────────────────────────────
 function PaperCard({paper,onOpen,onSave,saved,onRemove}){
   const hasPdf=!!paper.openAccessPdf?.url;
   const [hov,setHov]=useState(false);
-  const actions=[
-    ["#eef2ff","#4f46e5",()=>onOpen(paper,"graph"),<><GraphIcon/>Related Graph</>],
-    ["#f5f3ff","#7c3aed",()=>onOpen(paper,"mindmap"),<><MapIcon/>Mind Map</>],
-    ...(hasPdf?[["#ecfdf5","#065f46",()=>onOpen(paper,"pdf"),<><BookIcon/>Read PDF</>]]:[]),
-    [saved?"#fef9c3":"#f8fafc",saved?"#92400e":"#64748b",()=>onSave(paper),<><SaveIcon/>{saved?"Saved":"Save"}</>],
-    ...(onRemove?[["#fee2e2","#ef4444",onRemove,<><TrashIcon/>Remove</>]]:[]),
-  ];
+  const hlCount=Object.values(LS.get(HL_KEY(paper.paperId),{})).flat().length;
   return(
     <div className="card" onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
       style={{background:"#fff",borderRadius:14,border:"1px solid #e0e7ff",padding:"18px 20px",marginBottom:14,
@@ -249,6 +401,7 @@ function PaperCard({paper,onOpen,onSave,saved,onRemove}){
           <div style={{display:"flex",gap:5,marginBottom:7,flexWrap:"wrap"}}>
             {hasPdf&&<span style={{background:"#dcfce7",color:"#166534",fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:600,display:"flex",alignItems:"center",gap:3}}><LockOpen/>Open Access</span>}
             {hasPdf&&<span style={{background:"#ede9fe",color:"#5b21b6",fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:600,display:"flex",alignItems:"center",gap:3}}><PdfIc/>PDF</span>}
+            {hlCount>0&&<span style={{background:"#fef9c3",color:"#92400e",fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:600}}>✏️ {hlCount} highlights</span>}
             {paper.year&&<span style={{background:"#f1f5f9",color:"#475569",fontSize:11,padding:"2px 8px",borderRadius:20}}>{paper.year}</span>}
             {(paper.fieldsOfStudy||[]).slice(0,2).map(f=><span key={f} style={{background:"#fef3c7",color:"#92400e",fontSize:11,padding:"2px 8px",borderRadius:20}}>{f}</span>)}
           </div>
@@ -264,7 +417,13 @@ function PaperCard({paper,onOpen,onSave,saved,onRemove}){
         </div>
       </div>
       <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-        {actions.map(([bg,c,fn,ch],i)=>(
+        {[
+          ["#eef2ff","#4f46e5",()=>onOpen(paper,"graph"),<><GraphIcon/>Related Graph</>],
+          ["#f5f3ff","#7c3aed",()=>onOpen(paper,"mindmap"),<><MapIcon/>Mind Map</>],
+          ...(hasPdf?[["#ecfdf5","#065f46",()=>onOpen(paper,"pdf"),<><BookIcon/>Read PDF</>]]:[]),
+          [saved?"#fef9c3":"#f8fafc",saved?"#92400e":"#64748b",()=>onSave(paper),<><SaveIcon/>{saved?"Saved":"Save"}</>],
+          ...(onRemove?[["#fee2e2","#ef4444",onRemove,<><TrashIcon/>Remove</>]]:[]),
+        ].map(([bg,c,fn,ch],i)=>(
           <button key={i} onClick={fn}
             style={{background:bg,color:c,border:"none",borderRadius:8,padding:"7px 13px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"opacity 0.15s"}}
             onMouseEnter={e=>e.currentTarget.style.opacity="0.75"}
@@ -277,7 +436,7 @@ function PaperCard({paper,onOpen,onSave,saved,onRemove}){
   );
 }
 
-// ── Modal ──────────────────────────────────────────────────────────────────
+// ── Modal ─────────────────────────────────────────────────────────────────
 function Modal({title,onClose,children}){
   return(
     <div style={{position:"fixed",inset:0,zIndex:900,background:"rgba(10,15,35,0.55)",display:"flex",alignItems:"center",justifyContent:"center"}}
@@ -293,48 +452,27 @@ function Modal({title,onClose,children}){
   );
 }
 
-// ── Error Banner ───────────────────────────────────────────────────────────
-function ErrorBanner({msg,onRetry}){
-  return(
-    <div style={{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:12,padding:"16px 20px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:12}}>
-      <span style={{color:"#ea580c",marginTop:1}}><WarnIcon/></span>
-      <div style={{flex:1}}>
-        <p style={{fontWeight:700,color:"#9a3412",marginBottom:4}}>Could not load results</p>
-        <p style={{fontSize:13,color:"#c2410c",marginBottom:8}}>{msg}</p>
-        <p style={{fontSize:12,color:"#7c3aed",marginBottom:10}}>
-          💡 <b>Tip:</b> The Semantic Scholar API sometimes blocks browsers directly. Try opening your browser console (F12) to see the exact error, or try a different search term.
-        </p>
-        {onRetry&&<button onClick={onRetry} style={{background:"#ea580c",color:"#fff",border:"none",borderRadius:8,padding:"7px 16px",fontWeight:600,fontSize:13,cursor:"pointer"}}>Retry</button>}
-      </div>
-    </div>
-  );
-}
+// ── Skeleton ──────────────────────────────────────────────────────────────
+const Skeleton=()=>(
+  <div style={{display:"flex",flexDirection:"column",gap:12}}>
+    {[1,2,3].map(i=><div key={i} style={{background:"#f8faff",borderRadius:14,height:140,border:"1px solid #e0e7ff",animation:"pulse 1.4s ease-in-out infinite"}}/>)}
+  </div>
+);
 
-// ── Skeleton ───────────────────────────────────────────────────────────────
-function Skeleton(){
-  return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      {[1,2,3].map(i=>(
-        <div key={i} style={{background:"#f8faff",borderRadius:14,height:140,border:"1px solid #e0e7ff",animation:"pulse 1.4s ease-in-out infinite"}}/>
-      ))}
-    </div>
-  );
-}
-
-// ── App ────────────────────────────────────────────────────────────────────
+// ── App ───────────────────────────────────────────────────────────────────
 function App(){
-  const [query,  setQuery]  = useState("");
-  const [sType,  setSType]  = useState("keyword");
-  const [results,setResults]= useState([]);
-  const [loading,setLoading]= useState(false);
-  const [error,  setError]  = useState("");
-  const [tab,    setTab]    = useState("all");
-  const [modal,  setModal]  = useState(null);
-  const [pdfUrl, setPdfUrl] = useState(null);
-  const [library,setLibrary]= useState(()=>LS.get("rp_library"));
-  const [view,   setView]   = useState("search");
-  const [relLoad,setRelLoad]= useState(false);
-  const lastQuery = useRef({q:"",t:""});
+  const [query,  setQuery]  =useState("");
+  const [sType,  setSType]  =useState("keyword");
+  const [results,setResults]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [error,  setError]  =useState("");
+  const [tab,    setTab]    =useState("all");
+  const [modal,  setModal]  =useState(null);
+  const [pdfPaper,setPdfPaper]=useState(null);
+  const [library,setLibrary]=useState(()=>LS.get("rp_library",[]));
+  const [view,   setView]   =useState("search");
+  const [relLoad,setRelLoad]=useState(false);
+  const lastQ=useRef({q:"",t:""});
 
   const saveLib=ps=>{setLibrary(ps);LS.set("rp_library",ps);};
   const savePaper=p=>{if(!library.find(x=>x.paperId===p.paperId))saveLib([...library,p]);};
@@ -342,26 +480,23 @@ function App(){
 
   const doSearch=async(q=query,t=sType)=>{
     if(!q.trim())return;
-    lastQuery.current={q,t};
+    lastQ.current={q,t};
     setLoading(true);setError("");setResults([]);
     try{
       const data=await searchPapers(q.trim(),t);
       const valid=data.filter(p=>p&&p.title&&p.paperId);
-      if(!valid.length) setError("No papers found for this search. Try different keywords.");
+      if(!valid.length)setError("No papers found. Try different keywords.");
       else setResults(valid);
-    }catch(e){
-      setError(`Search failed: ${e.message}. The API may be temporarily unavailable — please try again in a few seconds.`);
-    }
+    }catch(e){setError(`Search failed: ${e.message}. Please try again.`);}
     setLoading(false);
   };
 
   const openModal=async(paper,type)=>{
-    if(type==="pdf"){setPdfUrl(paper.openAccessPdf.url);return;}
+    if(type==="pdf"){setPdfPaper(paper);return;}
     if(type==="graph"){
       setModal({type,paper,related:[]});
       setRelLoad(true);
-      try{const rel=await getRelated(paper.paperId);setModal(m=>({...m,related:rel}));}
-      catch{}
+      try{const rel=await getRelated(paper.paperId);setModal(m=>({...m,related:rel}));}catch{}
       setRelLoad(false);
     }else{
       setModal({type,paper});
@@ -394,7 +529,6 @@ function App(){
       <main style={{maxWidth:1100,margin:"0 auto",padding:"36px 20px"}}>
         {view==="search"?(
           <>
-            {/* Hero */}
             <div style={{textAlign:"center",marginBottom:40}}>
               <h1 style={{fontSize:"clamp(26px,5vw,38px)",fontWeight:900,margin:"0 0 10px",background:"linear-gradient(135deg,#4f46e5,#7c3aed)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>
                 Discover Research Papers
@@ -402,53 +536,43 @@ function App(){
               <p style={{fontSize:16,color:"#6b7280"}}>Search millions of open-access papers — read, highlight & organize your research.</p>
             </div>
 
-            {/* Search */}
             <div style={{background:"#f8faff",border:"1.5px solid #e0e7ff",borderRadius:18,padding:"20px 22px",marginBottom:28,boxShadow:"0 4px 24px rgba(99,102,241,0.07)"}}>
               <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
                 {TYPES.map(([v,l])=>(
                   <button key={v} onClick={()=>setSType(v)}
-                    style={{background:sType===v?"#4f46e5":"#fff",color:sType===v?"#fff":"#6b7280",
-                      border:"1.5px solid "+(sType===v?"#4f46e5":"#e0e7ff"),borderRadius:9,padding:"6px 14px",
-                      fontSize:13,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>
+                    style={{background:sType===v?"#4f46e5":"#fff",color:sType===v?"#fff":"#6b7280",border:"1.5px solid "+(sType===v?"#4f46e5":"#e0e7ff"),borderRadius:9,padding:"6px 14px",fontSize:13,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>
                     {l}
                   </button>
                 ))}
               </div>
               <div style={{display:"flex",gap:10}}>
-                <input value={query} onChange={e=>setQuery(e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&doSearch()}
+                <input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()}
                   placeholder={sType==="doi"?"e.g. 10.1038/nature12373":sType==="author"?"Author name…":"Title or keyword…"}
-                  style={{flex:1,border:"1.5px solid #e0e7ff",borderRadius:11,padding:"12px 18px",fontSize:15,
-                    outline:"none",background:"#fff",color:"#1e1b4b",transition:"border 0.15s"}}
+                  style={{flex:1,border:"1.5px solid #e0e7ff",borderRadius:11,padding:"12px 18px",fontSize:15,outline:"none",background:"#fff",color:"#1e1b4b",transition:"border 0.15s"}}
                   onFocus={e=>e.target.style.borderColor="#6366f1"}
                   onBlur={e=>e.target.style.borderColor="#e0e7ff"}/>
                 <button onClick={()=>doSearch()} disabled={loading}
-                  style={{background:"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",border:"none",
-                    borderRadius:11,padding:"12px 26px",fontSize:15,fontWeight:700,cursor:"pointer",
-                    display:"flex",alignItems:"center",gap:8,boxShadow:"0 4px 14px rgba(99,102,241,0.3)",
-                    opacity:loading?0.7:1,transition:"opacity 0.15s"}}>
+                  style={{background:"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",border:"none",borderRadius:11,padding:"12px 26px",fontSize:15,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:8,boxShadow:"0 4px 14px rgba(99,102,241,0.3)",opacity:loading?0.7:1}}>
                   <SearchIcon/>{loading?"Searching…":"Search"}
                 </button>
               </div>
-              {/* status */}
-              {loading&&(
-                <p style={{marginTop:12,fontSize:12.5,color:"#6366f1",display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{display:"inline-block",width:12,height:12,border:"2px solid #e0e7ff",borderTopColor:"#6366f1",borderRadius:"50%",animation:"spin .8s linear infinite"}}/>
-                  Connecting to Semantic Scholar API…
-                </p>
-              )}
             </div>
 
-            {/* Error */}
-            {error&&<ErrorBanner msg={error} onRetry={()=>doSearch(lastQuery.current.q,lastQuery.current.t)}/>}
+            {error&&(
+              <div style={{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:12,padding:"14px 18px",marginBottom:18,display:"flex",gap:10,alignItems:"flex-start"}}>
+                <WarnIcon/>
+                <div>
+                  <p style={{fontWeight:700,color:"#9a3412",marginBottom:4}}>{error}</p>
+                  <button onClick={()=>doSearch(lastQ.current.q,lastQ.current.t)} style={{background:"#ea580c",color:"#fff",border:"none",borderRadius:7,padding:"5px 14px",fontSize:12.5,fontWeight:600,cursor:"pointer"}}>Retry</button>
+                </div>
+              </div>
+            )}
 
-            {/* Tabs */}
             {results.length>0&&(
               <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #e0e7ff"}}>
                 {[["all",`All (${results.length})`],["oa",`Open Access / PDF (${oaCount})`]].map(([v,l])=>(
                   <button key={v} onClick={()=>setTab(v)}
-                    style={{background:"none",border:"none",borderBottom:tab===v?"2.5px solid #4f46e5":"2.5px solid transparent",
-                      color:tab===v?"#4f46e5":"#9ca3af",fontWeight:700,fontSize:13.5,padding:"8px 18px",cursor:"pointer",marginBottom:-2}}>
+                    style={{background:"none",border:"none",borderBottom:tab===v?"2.5px solid #4f46e5":"2.5px solid transparent",color:tab===v?"#4f46e5":"#9ca3af",fontWeight:700,fontSize:13.5,padding:"8px 18px",cursor:"pointer",marginBottom:-2}}>
                     {l}
                   </button>
                 ))}
@@ -456,20 +580,16 @@ function App(){
             )}
 
             {loading&&<Skeleton/>}
-            {!loading&&filtered.map(p=>(
-              <PaperCard key={p.paperId} paper={p} onOpen={openModal} onSave={savePaper} saved={!!library.find(l=>l.paperId===p.paperId)}/>
-            ))}
+            {!loading&&filtered.map(p=><PaperCard key={p.paperId} paper={p} onOpen={openModal} onSave={savePaper} saved={!!library.find(l=>l.paperId===p.paperId)}/>)}
             {!loading&&!error&&results.length===0&&(
               <div style={{textAlign:"center",padding:"70px 0",color:"#9ca3af"}}>
                 <div style={{fontSize:52,marginBottom:14}}>🔍</div>
                 <p style={{fontSize:17,fontWeight:700,marginBottom:6}}>Search for research papers</p>
                 <p style={{fontSize:13}}>Try a keyword, author name, or paste a DOI</p>
-                <p style={{fontSize:12,marginTop:8,color:"#c4b5fd"}}>Powered by Semantic Scholar — millions of free papers</p>
               </div>
             )}
           </>
         ):(
-          /* Library */
           <>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:28}}>
               <h2 style={{fontSize:26,fontWeight:900,color:"#1e1b4b"}}>📁 My Research Library</h2>
@@ -481,9 +601,7 @@ function App(){
                 <p style={{fontSize:17,fontWeight:700,marginBottom:6}}>Your library is empty</p>
                 <p style={{fontSize:13}}>Save papers from search results to collect them here</p>
               </div>
-            ):library.map(p=>(
-              <PaperCard key={p.paperId} paper={p} onOpen={openModal} onSave={()=>{}} saved={true} onRemove={()=>removeLib(p.paperId)}/>
-            ))}
+            ):library.map(p=><PaperCard key={p.paperId} paper={p} onOpen={openModal} onSave={()=>{}} saved={true} onRemove={()=>removeLib(p.paperId)}/>)}
           </>
         )}
       </main>
@@ -491,9 +609,7 @@ function App(){
       {/* Graph Modal */}
       {modal?.type==="graph"&&(
         <Modal title={`🔗 Related — ${(modal.paper.title||"").slice(0,46)}…`} onClose={()=>setModal(null)}>
-          {relLoad?(
-            <div style={{textAlign:"center",padding:40}}><div className="spinner"/><p style={{marginTop:14,color:"#6366f1",fontWeight:600}}>Building citation graph…</p></div>
-          ):(
+          {relLoad?<div style={{textAlign:"center",padding:40}}><div className="spinner"/><p style={{marginTop:14,color:"#6366f1",fontWeight:600}}>Building citation graph…</p></div>:(
             <>
               <ForceGraph center={modal.paper} related={modal.related} onSelect={p=>{setModal(null);setTimeout(()=>openModal(p,"graph"),120);}}/>
               {modal.related.length>0&&(
@@ -527,34 +643,21 @@ function App(){
             </div>
           )}
           <div style={{marginTop:14,display:"flex",gap:8}}>
-            <button onClick={()=>savePaper(modal.paper)}
-              style={{background:"#eef2ff",color:"#4f46e5",border:"none",borderRadius:8,padding:"8px 16px",fontWeight:600,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-              <SaveIcon/>Save to Library
-            </button>
+            <button onClick={()=>savePaper(modal.paper)} style={{background:"#eef2ff",color:"#4f46e5",border:"none",borderRadius:8,padding:"8px 16px",fontWeight:600,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><SaveIcon/>Save to Library</button>
             {modal.paper.openAccessPdf?.url&&(
-              <button onClick={()=>{setModal(null);setPdfUrl(modal.paper.openAccessPdf.url);}}
-                style={{background:"#ecfdf5",color:"#065f46",border:"none",borderRadius:8,padding:"8px 16px",fontWeight:600,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-                <BookIcon/>Read PDF
-              </button>
+              <button onClick={()=>{setModal(null);setPdfPaper(modal.paper);}} style={{background:"#ecfdf5",color:"#065f46",border:"none",borderRadius:8,padding:"8px 16px",fontWeight:600,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><BookIcon/>Read PDF</button>
             )}
           </div>
         </Modal>
       )}
 
       {/* PDF Viewer */}
-      {pdfUrl&&(
-        <PdfViewer url={pdfUrl} onClose={()=>setPdfUrl(null)}
-          onSave={()=>{
-            const p=[...results,...library].find(r=>r.openAccessPdf?.url===pdfUrl);
-            if(p)savePaper(p);
-          }}/>
-      )}
+      {pdfPaper&&<PdfViewer paper={pdfPaper} onClose={()=>setPdfPaper(null)} onSave={()=>savePaper(pdfPaper)}/>}
     </div>
   );
 }
 
-const root=ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App/>);
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
