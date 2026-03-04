@@ -1,155 +1,157 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>ResearchLens</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', system-ui, sans-serif; background: #fff; color: #1e1b4b; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.45} }
-    @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
-    @keyframes spin { to{transform:rotate(360deg)} }
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #f1f5f9; }
-    ::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 10px; }
-    .card { animation: fadeIn 0.3s ease both; }
-    .spinner { width:32px;height:32px;border:3px solid #e0e7ff;border-top-color:#6366f1;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',system-ui,sans-serif;background:#fff;color:#1e1b4b}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .card{animation:fadeIn .3s ease both}
+    .spinner{width:36px;height:36px;border:3px solid #e0e7ff;border-top-color:#6366f1;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-track{background:#f1f5f9}
+    ::-webkit-scrollbar-thumb{background:#c7d2fe;border-radius:10px}
   </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useRef, useCallback } = React;
+const {useState,useEffect,useRef} = React;
 
 // ── Icons ──────────────────────────────────────────────────────────────────
-const Ic = ({d,s=18,c="currentColor",...p}) => (
+const Ic=({d,s=18,c="currentColor",...p})=>(
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
     <path d={d}/>
   </svg>
 );
-const SearchIcon  = () => <Ic d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>;
-const FolderIcon  = () => <Ic d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>;
-const BookIcon    = () => <Ic d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z"/>;
-const ExtIcon     = () => <Ic d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>;
-const HlIcon      = () => <Ic d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>;
-const MapIcon     = () => <Ic d="M3 11l19-9-9 19-2-8-8-2z"/>;
-const SaveIcon    = () => <Ic d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"/>;
-const CloseIcon   = () => <Ic d="M18 6L6 18M6 6l12 12"/>;
-const GraphIcon   = () => <Ic d="M18 20V10M12 20V4M6 20v-6"/>;
-const TrashIcon   = () => <Ic d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" s={15}/>;
-const LockOpen    = () => <Ic d="M7 11V7a5 5 0 0 1 9.9-1M21 21H3V11h18v10z" s={13}/>;
-const PdfIc       = () => <Ic d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" s={13}/>;
+const SearchIcon =()=><Ic d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>;
+const FolderIcon =()=><Ic d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>;
+const BookIcon   =()=><Ic d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z"/>;
+const ExtIcon    =()=><Ic d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>;
+const HlIcon     =()=><Ic d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>;
+const MapIcon    =()=><Ic d="M3 11l19-9-9 19-2-8-8-2z"/>;
+const SaveIcon   =()=><Ic d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"/>;
+const CloseIcon  =()=><Ic d="M18 6L6 18M6 6l12 12"/>;
+const GraphIcon  =()=><Ic d="M18 20V10M12 20V4M6 20v-6"/>;
+const TrashIcon  =()=><Ic d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" s={15}/>;
+const LockOpen   =()=><Ic d="M7 11V7a5 5 0 0 1 9.9-1M21 21H3V11h18v10z" s={13}/>;
+const PdfIc      =()=><Ic d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" s={13}/>;
+const WarnIcon   =()=><Ic d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" s={20}/>;
 
 // ── Storage ────────────────────────────────────────────────────────────────
-const LS = {
-  get: k => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } },
-  set: (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+const LS={
+  get:k=>{try{return JSON.parse(localStorage.getItem(k))||[];}catch{return[];}},
+  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
 };
+const COLORS=["#FDE68A","#BBF7D0","#BFDBFE","#FCA5A5","#DDD6FE"];
 
-const COLORS = ["#FDE68A","#BBF7D0","#BFDBFE","#FCA5A5","#DDD6FE"];
+// ── API with proxy fallback ────────────────────────────────────────────────
+const FIELDS="paperId,title,authors,year,citationCount,referenceCount,openAccessPdf,externalIds,abstract,fieldsOfStudy";
+const S2_BASE="https://api.semanticscholar.org/graph/v1";
+// CORS proxy fallbacks (tried in order if direct fails)
+const PROXIES=[
+  url=>url,
+  url=>`https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url=>`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+];
 
-// ── API ────────────────────────────────────────────────────────────────────
-const S2 = "https://api.semanticscholar.org/graph/v1";
-const FIELDS = "paperId,title,authors,year,citationCount,referenceCount,openAccessPdf,externalIds,abstract,fieldsOfStudy,publicationTypes";
-
-async function searchPapers(query, type) {
-  if (type === "doi") {
-    const r = await fetch(`${S2}/paper/DOI:${encodeURIComponent(query)}?fields=${FIELDS}`);
-    if (!r.ok) throw new Error("Not found");
-    return [await r.json()];
+async function fetchWithFallback(url){
+  for(const proxy of PROXIES){
+    try{
+      const r=await fetch(proxy(url),{headers:{"Content-Type":"application/json"}});
+      if(r.ok){
+        const txt=await r.text();
+        return JSON.parse(txt);
+      }
+    }catch(e){continue;}
   }
-  if (type === "author") {
-    const ar = await fetch(`${S2}/author/search?query=${encodeURIComponent(query)}&fields=authorId,name&limit=5`);
-    const ad = await ar.json();
-    if (!ad.data?.length) return [];
-    const pr = await fetch(`${S2}/author/${ad.data[0].authorId}/papers?fields=${FIELDS}&limit=20`);
-    return (await pr.json()).data || [];
-  }
-  const r = await fetch(`${S2}/paper/search?query=${encodeURIComponent(query)}&fields=${FIELDS}&limit=20`);
-  return (await r.json()).data || [];
+  throw new Error("All fetch attempts failed");
 }
 
-async function getRelated(paperId) {
-  const r = await fetch(`${S2}/paper/${paperId}/references?fields=${FIELDS}&limit=15`);
-  return ((await r.json()).data || []).map(x => x.citedPaper).filter(Boolean);
+async function searchPapers(query,type){
+  let url;
+  if(type==="doi"){
+    url=`${S2_BASE}/paper/DOI:${encodeURIComponent(query)}?fields=${FIELDS}`;
+    const d=await fetchWithFallback(url);
+    return d.paperId?[d]:[];
+  }
+  if(type==="author"){
+    const au=await fetchWithFallback(`${S2_BASE}/author/search?query=${encodeURIComponent(query)}&fields=authorId,name&limit=5`);
+    if(!au.data?.length) return [];
+    const pd=await fetchWithFallback(`${S2_BASE}/author/${au.data[0].authorId}/papers?fields=${FIELDS}&limit=20`);
+    return pd.data||[];
+  }
+  const d=await fetchWithFallback(`${S2_BASE}/paper/search?query=${encodeURIComponent(query)}&fields=${FIELDS}&limit=20`);
+  return d.data||[];
+}
+
+async function getRelated(paperId){
+  const d=await fetchWithFallback(`${S2_BASE}/paper/${paperId}/references?fields=${FIELDS}&limit=15`);
+  return(d.data||[]).map(x=>x.citedPaper).filter(Boolean);
 }
 
 // ── Force Graph ────────────────────────────────────────────────────────────
-function ForceGraph({ center, related, onSelect }) {
-  const animRef = useRef(null);
-  const [nodes, setNodes] = useState([]);
-  const [edges, setEdges] = useState([]);
-
-  useEffect(() => {
-    const W = 520, H = 370, cx = W/2, cy = H/2;
-    const all = [
-      { id: center.paperId, label: (center.title||"").slice(0,28)+"…", author: center.authors?.[0]?.name||"", cit: center.citationCount||0, main:true, x:cx, y:cy, vx:0, vy:0 },
-      ...related.slice(0,12).map((p,i) => {
-        const a = (2*Math.PI*i)/Math.min(related.length,12);
-        return { id:p.paperId, label:(p.title||"").slice(0,22)+"…", author:p.authors?.[0]?.name||"", cit:p.citationCount||0, main:false, x:cx+150*Math.cos(a), y:cy+125*Math.sin(a), vx:0, vy:0, paper:p };
+function ForceGraph({center,related,onSelect}){
+  const animRef=useRef(null);
+  const [nodes,setNodes]=useState([]);
+  const [edges,setEdges]=useState([]);
+  useEffect(()=>{
+    const W=520,H=370,cx=W/2,cy=H/2;
+    const all=[
+      {id:center.paperId,label:(center.title||"").slice(0,26)+"…",author:center.authors?.[0]?.name||"",cit:center.citationCount||0,main:true,x:cx,y:cy,vx:0,vy:0},
+      ...related.slice(0,12).map((p,i)=>{
+        const a=(2*Math.PI*i)/Math.min(related.length,12);
+        return{id:p.paperId,label:(p.title||"").slice(0,22)+"…",author:p.authors?.[0]?.name||"",cit:p.citationCount||0,main:false,x:cx+150*Math.cos(a),y:cy+125*Math.sin(a),vx:0,vy:0,paper:p};
       })
     ];
-    const el = all.slice(1).map(n=>({s:center.paperId,t:n.id}));
+    const el=all.slice(1).map(n=>({s:center.paperId,t:n.id}));
     setEdges(el);
-    let ns = all.map(n=>({...n}));
-    const tick = () => {
+    let ns=all.map(n=>({...n}));
+    const tick=()=>{
       for(let i=0;i<3;i++){
-        ns.forEach((a,ai)=>{
-          ns.forEach((b,bi)=>{
-            if(ai===bi)return;
-            const dx=a.x-b.x,dy=a.y-b.y,d=Math.sqrt(dx*dx+dy*dy)||1,f=2200/(d*d);
-            a.vx+=f*dx/d; a.vy+=f*dy/d;
-          });
-        });
+        ns.forEach((a,ai)=>{ns.forEach((b,bi)=>{
+          if(ai===bi)return;
+          const dx=a.x-b.x,dy=a.y-b.y,d=Math.sqrt(dx*dx+dy*dy)||1,f=2200/(d*d);
+          a.vx+=f*dx/d;a.vy+=f*dy/d;
+        });});
         el.forEach(e=>{
           const a=ns.find(n=>n.id===e.s),b=ns.find(n=>n.id===e.t);
           if(!a||!b)return;
           const dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1,f=(d-165)*0.03;
-          a.vx+=f*dx/d; a.vy+=f*dy/d; b.vx-=f*dx/d; b.vy-=f*dy/d;
+          a.vx+=f*dx/d;a.vy+=f*dy/d;b.vx-=f*dx/d;b.vy-=f*dy/d;
         });
-        ns.forEach(n=>{
-          n.vx*=0.7; n.vy*=0.7;
-          n.x=Math.max(55,Math.min(W-55,n.x+n.vx));
-          n.y=Math.max(35,Math.min(H-35,n.y+n.vy));
-        });
+        ns.forEach(n=>{n.vx*=0.7;n.vy*=0.7;n.x=Math.max(55,Math.min(W-55,n.x+n.vx));n.y=Math.max(35,Math.min(H-35,n.y+n.vy));});
       }
       setNodes([...ns]);
       animRef.current=requestAnimationFrame(tick);
     };
     animRef.current=requestAnimationFrame(tick);
-    setTimeout(()=>cancelAnimationFrame(animRef.current),4500);
-    return ()=>cancelAnimationFrame(animRef.current);
+    setTimeout(()=>cancelAnimationFrame(animRef.current),5000);
+    return()=>cancelAnimationFrame(animRef.current);
   },[center.paperId]);
-
-  return (
+  return(
     <svg width="100%" viewBox="0 0 520 370" style={{background:"#f8faff",borderRadius:12}}>
       <defs>
         <radialGradient id="cg"><stop offset="0%" stopColor="#6366f1"/><stop offset="100%" stopColor="#4338ca"/></radialGradient>
         <radialGradient id="ng"><stop offset="0%" stopColor="#e0e7ff"/><stop offset="100%" stopColor="#c7d2fe"/></radialGradient>
       </defs>
-      {edges.map((e,i)=>{
-        const a=nodes.find(n=>n.id===e.s),b=nodes.find(n=>n.id===e.t);
-        if(!a||!b)return null;
-        return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#a5b4fc" strokeWidth={1.5} strokeOpacity={0.6}/>;
+      {edges.map((e,i)=>{const a=nodes.find(n=>n.id===e.s),b=nodes.find(n=>n.id===e.t);if(!a||!b)return null;return<line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#a5b4fc" strokeWidth={1.5} strokeOpacity={0.6}/>;
       })}
       {nodes.map(n=>(
         <g key={n.id} onClick={()=>!n.main&&onSelect(n.paper)} style={{cursor:n.main?"default":"pointer"}}>
           <circle cx={n.x} cy={n.y} r={n.main?33:22} fill={n.main?"url(#cg)":"url(#ng)"} stroke={n.main?"#4f46e5":"#a5b4fc"} strokeWidth={2}/>
-          <text x={n.x} y={n.y-6} textAnchor="middle" fontSize={n.main?7.5:6.5} fill={n.main?"#fff":"#3730a3"} fontWeight="700">
-            {(n.label||"").slice(0,20)}
-          </text>
-          <text x={n.x} y={n.y+5} textAnchor="middle" fontSize={5.5} fill={n.main?"#c7d2fe":"#6366f1"}>
-            {(n.author||"").split(" ").pop()}
-          </text>
-          <text x={n.x} y={n.y+14} textAnchor="middle" fontSize={5} fill={n.main?"#e0e7ff":"#818cf8"}>
-            ⭐ {n.cit}
-          </text>
+          <text x={n.x} y={n.y-6} textAnchor="middle" fontSize={n.main?7.5:6.5} fill={n.main?"#fff":"#3730a3"} fontWeight="700">{(n.label||"").slice(0,20)}</text>
+          <text x={n.x} y={n.y+5} textAnchor="middle" fontSize={5.5} fill={n.main?"#c7d2fe":"#6366f1"}>{(n.author||"").split(" ").pop()}</text>
+          <text x={n.x} y={n.y+14} textAnchor="middle" fontSize={5} fill={n.main?"#e0e7ff":"#818cf8"}>⭐{n.cit}</text>
         </g>
       ))}
     </svg>
@@ -157,42 +159,37 @@ function ForceGraph({ center, related, onSelect }) {
 }
 
 // ── MindMap ────────────────────────────────────────────────────────────────
-function MindMap({ paper }) {
-  const sections = [
-    { label:"Title",    children:[(paper.title||"").slice(0,40)+"…"] },
-    { label:"Authors",  children:(paper.authors||[]).slice(0,4).map(a=>a.name) },
-    { label:"Fields",   children:paper.fieldsOfStudy||["General"] },
-    { label:"Abstract", children:[(paper.abstract||"N/A").slice(0,70)+"…"] },
-    { label:"Citations",children:[`Cited ${paper.citationCount||0}x`,`${paper.referenceCount||0} refs`] },
-    { label:"Year",     children:[String(paper.year||"?")] },
+function MindMap({paper}){
+  const sections=[
+    {label:"Title",    children:[(paper.title||"").slice(0,38)+"…"]},
+    {label:"Authors",  children:(paper.authors||[]).slice(0,4).map(a=>a.name)},
+    {label:"Fields",   children:paper.fieldsOfStudy||["General"]},
+    {label:"Abstract", children:[(paper.abstract||"N/A").slice(0,65)+"…"]},
+    {label:"Citations",children:[`Cited ${paper.citationCount||0}x`,`${paper.referenceCount||0} refs`]},
+    {label:"Year",     children:[String(paper.year||"?")]},
   ];
   const cx=300,cy=200;
-  return (
+  return(
     <svg width="100%" viewBox="0 0 600 400" style={{background:"#f8faff",borderRadius:12}}>
-      <defs>
-        <radialGradient id="mg"><stop offset="0%" stopColor="#6366f1"/><stop offset="100%" stopColor="#4338ca"/></radialGradient>
-      </defs>
+      <defs><radialGradient id="mg"><stop offset="0%" stopColor="#6366f1"/><stop offset="100%" stopColor="#4338ca"/></radialGradient></defs>
       <circle cx={cx} cy={cy} r={38} fill="url(#mg)"/>
       <text x={cx} y={cy-4} textAnchor="middle" fontSize={8} fill="#fff" fontWeight="bold">PAPER</text>
       <text x={cx} y={cy+8} textAnchor="middle" fontSize={6} fill="#c7d2fe">MIND MAP</text>
       {sections.map((s,i)=>{
         const angle=(2*Math.PI*i)/sections.length-Math.PI/2;
         const nx=cx+92*Math.cos(angle),ny=cy+92*Math.sin(angle);
-        return (
+        return(
           <g key={i}>
             <line x1={cx+38*Math.cos(angle)} y1={cy+38*Math.sin(angle)} x2={nx} y2={ny} stroke="#a5b4fc" strokeWidth={1.5}/>
             <circle cx={nx} cy={ny} r={22} fill="#e0e7ff" stroke="#6366f1" strokeWidth={1.5}/>
             <text x={nx} y={ny+4} textAnchor="middle" fontSize={6.5} fill="#3730a3" fontWeight="700">{s.label}</text>
             {s.children.slice(0,2).map((c,ci)=>{
-              const ca=angle+(ci-0.5)*0.45;
-              const lx=nx+58*Math.cos(ca),ly=ny+44*Math.sin(ca);
-              return (
-                <g key={ci}>
-                  <line x1={nx+22*Math.cos(ca)} y1={ny+22*Math.sin(ca)} x2={lx} y2={ly} stroke="#c7d2fe" strokeWidth={1}/>
-                  <rect x={lx-36} y={ly-9} width={72} height={18} rx={6} fill="#fff" stroke="#e0e7ff" strokeWidth={1}/>
-                  <text x={lx} y={ly+4} textAnchor="middle" fontSize={5.5} fill="#4b5563">{(c||"").slice(0,20)}</text>
-                </g>
-              );
+              const ca=angle+(ci-0.5)*0.45,lx=nx+58*Math.cos(ca),ly=ny+44*Math.sin(ca);
+              return(<g key={ci}>
+                <line x1={nx+22*Math.cos(ca)} y1={ny+22*Math.sin(ca)} x2={lx} y2={ly} stroke="#c7d2fe" strokeWidth={1}/>
+                <rect x={lx-36} y={ly-9} width={72} height={18} rx={6} fill="#fff" stroke="#e0e7ff" strokeWidth={1}/>
+                <text x={lx} y={ly+4} textAnchor="middle" fontSize={5.5} fill="#4b5563">{(c||"").slice(0,20)}</text>
+              </g>);
             })}
           </g>
         );
@@ -202,64 +199,64 @@ function MindMap({ paper }) {
 }
 
 // ── PDF Viewer ─────────────────────────────────────────────────────────────
-function PdfViewer({ url, onClose, onSave }) {
-  const [hlColor, setHlColor] = useState("#FDE68A");
-  const [hlMode, setHlMode]   = useState(false);
-  const proxy = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(url)}`;
-  const btn = (bg,color,onClick,children) => (
-    <button onClick={onClick} style={{background:bg,color,border:"none",borderRadius:8,padding:"6px 13px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-      {children}
-    </button>
-  );
-  return (
-    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(10,15,35,0.72)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+function PdfViewer({url,onClose,onSave}){
+  const [hlColor,setHlColor]=useState("#FDE68A");
+  const [hlMode,setHlMode]=useState(false);
+  const proxy=`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(url)}`;
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(10,15,35,0.75)",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{width:"93vw",height:"93vh",background:"#fff",borderRadius:16,overflow:"hidden",boxShadow:"0 30px 70px rgba(0,0,0,0.35)",display:"flex",flexDirection:"column"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",background:"#1e1b4b",flexShrink:0,flexWrap:"wrap"}}>
           <span style={{color:"#e0e7ff",fontWeight:800,fontSize:15,flex:1}}>📄 PDF Viewer</span>
-          <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{color:"#a5b4fc",fontSize:12}}>Highlight:</span>
-            {COLORS.map(c=>(
-              <button key={c} onClick={()=>{setHlColor(c);setHlMode(true);}}
-                style={{width:20,height:20,borderRadius:"50%",background:c,border:hlColor===c&&hlMode?"2.5px solid #fff":"2px solid transparent",cursor:"pointer"}}/>
-            ))}
-            {btn(hlMode?"#6366f1":"#3730a3","#fff",()=>setHlMode(!hlMode),<><HlIcon/>{hlMode?"Highlight ON":"Highlight OFF"}</>)}
-          </div>
-          {btn("#4f46e5","#fff",()=>window.open(url,"_blank"),<><ExtIcon/>External</>)}
-          {btn("#059669","#fff",onSave,<><SaveIcon/>Save Paper</>)}
-          {btn("#ef4444","#fff",onClose,<><CloseIcon/>Close</>)}
+          <span style={{color:"#a5b4fc",fontSize:12}}>Highlight:</span>
+          {COLORS.map(c=>(
+            <button key={c} onClick={()=>{setHlColor(c);setHlMode(true);}}
+              style={{width:20,height:20,borderRadius:"50%",background:c,border:hlColor===c&&hlMode?"2.5px solid #fff":"2px solid transparent",cursor:"pointer"}}/>
+          ))}
+          {[
+            [hlMode?"#6366f1":"#3730a3","#fff",()=>setHlMode(!hlMode),<><HlIcon/>{hlMode?"Highlight ON":"Highlight"}</>],
+            ["#4f46e5","#fff",()=>window.open(url,"_blank"),<><ExtIcon/>External</>],
+            ["#059669","#fff",onSave,<><SaveIcon/>Save</>],
+            ["#ef4444","#fff",onClose,<><CloseIcon/>Close</>],
+          ].map(([bg,c,fn,ch],i)=>(
+            <button key={i} onClick={fn} style={{background:bg,color:c,border:"none",borderRadius:8,padding:"6px 13px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{ch}</button>
+          ))}
         </div>
         <iframe src={proxy} style={{flex:1,border:"none"}} title="PDF Viewer"/>
-        {hlMode && (
-          <div style={{position:"absolute",bottom:18,right:22,background:"#1e1b4b",color:"#c7d2fe",fontSize:11,padding:"6px 14px",borderRadius:8,opacity:0.9,pointerEvents:"none"}}>
-            Highlight mode ON · Select text in PDF to highlight
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
 // ── Paper Card ─────────────────────────────────────────────────────────────
-function PaperCard({ paper, onOpen, onSave, saved, onRemove }) {
-  const hasPdf = !!paper.openAccessPdf?.url;
-  const [hov, setHov] = useState(false);
-  return (
-    <div className="card" style={{background:"#fff",borderRadius:14,border:"1px solid #e0e7ff",padding:"18px 20px",marginBottom:14,boxShadow:hov?"0 8px 28px rgba(99,102,241,0.14)":"0 2px 12px rgba(99,102,241,0.06)",transform:hov?"translateY(-2px)":"none",transition:"all 0.2s"}}>
+function PaperCard({paper,onOpen,onSave,saved,onRemove}){
+  const hasPdf=!!paper.openAccessPdf?.url;
+  const [hov,setHov]=useState(false);
+  const actions=[
+    ["#eef2ff","#4f46e5",()=>onOpen(paper,"graph"),<><GraphIcon/>Related Graph</>],
+    ["#f5f3ff","#7c3aed",()=>onOpen(paper,"mindmap"),<><MapIcon/>Mind Map</>],
+    ...(hasPdf?[["#ecfdf5","#065f46",()=>onOpen(paper,"pdf"),<><BookIcon/>Read PDF</>]]:[]),
+    [saved?"#fef9c3":"#f8fafc",saved?"#92400e":"#64748b",()=>onSave(paper),<><SaveIcon/>{saved?"Saved":"Save"}</>],
+    ...(onRemove?[["#fee2e2","#ef4444",onRemove,<><TrashIcon/>Remove</>]]:[]),
+  ];
+  return(
+    <div className="card" onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{background:"#fff",borderRadius:14,border:"1px solid #e0e7ff",padding:"18px 20px",marginBottom:14,
+        boxShadow:hov?"0 8px 28px rgba(99,102,241,0.14)":"0 2px 12px rgba(99,102,241,0.06)",
+        transform:hov?"translateY(-2px)":"none",transition:"all 0.2s"}}>
       <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:10}}>
         <div style={{flex:1}}>
           <div style={{display:"flex",gap:5,marginBottom:7,flexWrap:"wrap"}}>
-            {hasPdf && <span style={{background:"#dcfce7",color:"#166534",fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:600,display:"flex",alignItems:"center",gap:3}}><LockOpen/>Open Access</span>}
-            {hasPdf && <span style={{background:"#ede9fe",color:"#5b21b6",fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:600,display:"flex",alignItems:"center",gap:3}}><PdfIc/>PDF</span>}
-            {paper.year && <span style={{background:"#f1f5f9",color:"#475569",fontSize:11,padding:"2px 8px",borderRadius:20}}>{paper.year}</span>}
-            {(paper.fieldsOfStudy||[]).slice(0,2).map(f=>(
-              <span key={f} style={{background:"#fef3c7",color:"#92400e",fontSize:11,padding:"2px 8px",borderRadius:20}}>{f}</span>
-            ))}
+            {hasPdf&&<span style={{background:"#dcfce7",color:"#166534",fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:600,display:"flex",alignItems:"center",gap:3}}><LockOpen/>Open Access</span>}
+            {hasPdf&&<span style={{background:"#ede9fe",color:"#5b21b6",fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:600,display:"flex",alignItems:"center",gap:3}}><PdfIc/>PDF</span>}
+            {paper.year&&<span style={{background:"#f1f5f9",color:"#475569",fontSize:11,padding:"2px 8px",borderRadius:20}}>{paper.year}</span>}
+            {(paper.fieldsOfStudy||[]).slice(0,2).map(f=><span key={f} style={{background:"#fef3c7",color:"#92400e",fontSize:11,padding:"2px 8px",borderRadius:20}}>{f}</span>)}
           </div>
           <h3 style={{margin:"0 0 5px",fontSize:15,fontWeight:700,color:"#1e1b4b",lineHeight:1.4}}>{paper.title}</h3>
           <p style={{margin:"0 0 6px",fontSize:12.5,color:"#6b7280"}}>
             {(paper.authors||[]).slice(0,3).map(a=>a.name).join(", ")}{(paper.authors||[]).length>3?" et al.":""}
           </p>
-          {paper.abstract && <p style={{margin:0,fontSize:12,color:"#9ca3af",lineHeight:1.55}}>{paper.abstract.slice(0,160)}…</p>}
+          {paper.abstract&&<p style={{margin:0,fontSize:12,color:"#9ca3af",lineHeight:1.55}}>{paper.abstract.slice(0,160)}…</p>}
         </div>
         <div style={{textAlign:"center",background:"#f0f4ff",borderRadius:10,padding:"8px 14px",minWidth:72,flexShrink:0}}>
           <div style={{fontSize:20,fontWeight:900,color:"#4f46e5"}}>{paper.citationCount||0}</div>
@@ -267,16 +264,10 @@ function PaperCard({ paper, onOpen, onSave, saved, onRemove }) {
         </div>
       </div>
       <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-        {[
-          ["#eef2ff","#4f46e5",()=>onOpen(paper,"graph"),<><GraphIcon/>Related Graph</>],
-          ["#f5f3ff","#7c3aed",()=>onOpen(paper,"mindmap"),<><MapIcon/>Mind Map</>],
-          ...(hasPdf?[["#ecfdf5","#065f46",()=>onOpen(paper,"pdf"),<><BookIcon/>Read PDF</>]]:[]),
-          [saved?"#fef9c3":"#f8fafc",saved?"#92400e":"#64748b",()=>onSave(paper),<><SaveIcon/>{saved?"Saved":"Save"}</>],
-          ...(onRemove?[["#fee2e2","#ef4444",onRemove,<><TrashIcon/>Remove</>]]:[]),
-        ].map(([bg,c,fn,ch],i)=>(
+        {actions.map(([bg,c,fn,ch],i)=>(
           <button key={i} onClick={fn}
-            style={{background:bg,color:c,border:"1px solid "+bg,borderRadius:8,padding:"7px 13px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"opacity 0.15s"}}
-            onMouseEnter={e=>e.currentTarget.style.opacity="0.8"}
+            style={{background:bg,color:c,border:"none",borderRadius:8,padding:"7px 13px",fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"opacity 0.15s"}}
+            onMouseEnter={e=>e.currentTarget.style.opacity="0.75"}
             onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
             {ch}
           </button>
@@ -287,11 +278,11 @@ function PaperCard({ paper, onOpen, onSave, saved, onRemove }) {
 }
 
 // ── Modal ──────────────────────────────────────────────────────────────────
-function Modal({ title, onClose, children }) {
-  return (
+function Modal({title,onClose,children}){
+  return(
     <div style={{position:"fixed",inset:0,zIndex:900,background:"rgba(10,15,35,0.55)",display:"flex",alignItems:"center",justifyContent:"center"}}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{width:"min(720px,95vw)",maxHeight:"90vh",background:"#fff",borderRadius:18,boxShadow:"0 30px 70px rgba(0,0,0,0.22)",display:"flex",flexDirection:"column",animation:"fadeIn 0.2s ease"}}>
+      <div style={{width:"min(720px,95vw)",maxHeight:"90vh",background:"#fff",borderRadius:18,boxShadow:"0 30px 70px rgba(0,0,0,0.22)",display:"flex",flexDirection:"column",animation:"fadeIn .2s ease"}}>
         <div style={{display:"flex",alignItems:"center",padding:"16px 22px",borderBottom:"1px solid #e0e7ff",background:"#f8faff",borderRadius:"18px 18px 0 0"}}>
           <span style={{fontWeight:800,fontSize:16,color:"#1e1b4b",flex:1}}>{title}</span>
           <button onClick={onClose} style={{background:"#f1f5f9",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",color:"#64748b"}}><CloseIcon/></button>
@@ -302,66 +293,89 @@ function Modal({ title, onClose, children }) {
   );
 }
 
+// ── Error Banner ───────────────────────────────────────────────────────────
+function ErrorBanner({msg,onRetry}){
+  return(
+    <div style={{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:12,padding:"16px 20px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:12}}>
+      <span style={{color:"#ea580c",marginTop:1}}><WarnIcon/></span>
+      <div style={{flex:1}}>
+        <p style={{fontWeight:700,color:"#9a3412",marginBottom:4}}>Could not load results</p>
+        <p style={{fontSize:13,color:"#c2410c",marginBottom:8}}>{msg}</p>
+        <p style={{fontSize:12,color:"#7c3aed",marginBottom:10}}>
+          💡 <b>Tip:</b> The Semantic Scholar API sometimes blocks browsers directly. Try opening your browser console (F12) to see the exact error, or try a different search term.
+        </p>
+        {onRetry&&<button onClick={onRetry} style={{background:"#ea580c",color:"#fff",border:"none",borderRadius:8,padding:"7px 16px",fontWeight:600,fontSize:13,cursor:"pointer"}}>Retry</button>}
+      </div>
+    </div>
+  );
+}
+
 // ── Skeleton ───────────────────────────────────────────────────────────────
-const Skeleton = () => (
-  <div style={{display:"flex",flexDirection:"column",gap:12}}>
-    {[1,2,3].map(i=>(
-      <div key={i} style={{background:"#f8faff",borderRadius:14,height:140,border:"1px solid #e0e7ff",animation:"pulse 1.4s ease-in-out infinite"}}/>
-    ))}
-  </div>
-);
+function Skeleton(){
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {[1,2,3].map(i=>(
+        <div key={i} style={{background:"#f8faff",borderRadius:14,height:140,border:"1px solid #e0e7ff",animation:"pulse 1.4s ease-in-out infinite"}}/>
+      ))}
+    </div>
+  );
+}
 
 // ── App ────────────────────────────────────────────────────────────────────
-function App() {
-  const [query,   setQuery]   = useState("");
-  const [sType,   setSType]   = useState("keyword");
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
-  const [tab,     setTab]     = useState("all");
-  const [modal,   setModal]   = useState(null);
-  const [pdfUrl,  setPdfUrl]  = useState(null);
-  const [library, setLibrary] = useState(()=>LS.get("rp_library"));
-  const [view,    setView]    = useState("search");
-  const [relLoad, setRelLoad] = useState(false);
+function App(){
+  const [query,  setQuery]  = useState("");
+  const [sType,  setSType]  = useState("keyword");
+  const [results,setResults]= useState([]);
+  const [loading,setLoading]= useState(false);
+  const [error,  setError]  = useState("");
+  const [tab,    setTab]    = useState("all");
+  const [modal,  setModal]  = useState(null);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [library,setLibrary]= useState(()=>LS.get("rp_library"));
+  const [view,   setView]   = useState("search");
+  const [relLoad,setRelLoad]= useState(false);
+  const lastQuery = useRef({q:"",t:""});
 
-  const saveLib = ps => { setLibrary(ps); LS.set("rp_library",ps); };
-  const savePaper = p => { if(!library.find(x=>x.paperId===p.paperId)) saveLib([...library,p]); };
-  const removeLib = id => saveLib(library.filter(p=>p.paperId!==id));
+  const saveLib=ps=>{setLibrary(ps);LS.set("rp_library",ps);};
+  const savePaper=p=>{if(!library.find(x=>x.paperId===p.paperId))saveLib([...library,p]);};
+  const removeLib=id=>saveLib(library.filter(p=>p.paperId!==id));
 
-  const doSearch = async () => {
-    if(!query.trim()) return;
-    setLoading(true); setError(""); setResults([]);
-    try {
-      const data = await searchPapers(query.trim(), sType);
-      setResults(data.filter(p=>p&&p.title));
-    } catch { setError("No results found. Try a different search."); }
+  const doSearch=async(q=query,t=sType)=>{
+    if(!q.trim())return;
+    lastQuery.current={q,t};
+    setLoading(true);setError("");setResults([]);
+    try{
+      const data=await searchPapers(q.trim(),t);
+      const valid=data.filter(p=>p&&p.title&&p.paperId);
+      if(!valid.length) setError("No papers found for this search. Try different keywords.");
+      else setResults(valid);
+    }catch(e){
+      setError(`Search failed: ${e.message}. The API may be temporarily unavailable — please try again in a few seconds.`);
+    }
     setLoading(false);
   };
 
-  const openModal = async (paper, type) => {
-    if(type==="pdf"){ setPdfUrl(paper.openAccessPdf.url); return; }
+  const openModal=async(paper,type)=>{
+    if(type==="pdf"){setPdfUrl(paper.openAccessPdf.url);return;}
     if(type==="graph"){
       setModal({type,paper,related:[]});
       setRelLoad(true);
-      try { const rel=await getRelated(paper.paperId); setModal(m=>({...m,related:rel})); }
-      catch {}
+      try{const rel=await getRelated(paper.paperId);setModal(m=>({...m,related:rel}));}
+      catch{}
       setRelLoad(false);
-    } else {
-      setModal({type,paper,related:[]});
+    }else{
+      setModal({type,paper});
     }
   };
 
-  const filtered = tab==="all" ? results : results.filter(p=>p.openAccessPdf?.url);
+  const filtered=tab==="all"?results:results.filter(p=>p.openAccessPdf?.url);
+  const oaCount=results.filter(p=>p.openAccessPdf?.url).length;
+  const TYPES=[["keyword","Keyword / Title"],["author","Author"],["doi","DOI"]];
 
-  const TYPES = [["keyword","Keyword/Title"],["author","Author"],["doi","DOI"]];
-  const TABS  = [["all",`All (${results.length})`],["oa",`Open Access (${results.filter(p=>p.openAccessPdf?.url).length})`]];
-
-  return (
+  return(
     <div style={{minHeight:"100vh",background:"#fff"}}>
-
       {/* Header */}
-      <header style={{position:"sticky",top:0,zIndex:100,background:"rgba(255,255,255,0.96)",borderBottom:"1px solid #e0e7ff",backdropFilter:"blur(12px)"}}>
+      <header style={{position:"sticky",top:0,zIndex:100,background:"rgba(255,255,255,0.97)",borderBottom:"1px solid #e0e7ff",backdropFilter:"blur(12px)"}}>
         <div style={{maxWidth:1100,margin:"0 auto",padding:"0 20px",height:62,display:"flex",alignItems:"center",gap:16}}>
           <div style={{display:"flex",alignItems:"center",gap:9}}>
             <div style={{width:36,height:36,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🔬</div>
@@ -378,55 +392,71 @@ function App() {
       </header>
 
       <main style={{maxWidth:1100,margin:"0 auto",padding:"36px 20px"}}>
-        {view==="search" ? (
+        {view==="search"?(
           <>
             {/* Hero */}
             <div style={{textAlign:"center",marginBottom:40}}>
-              <h1 style={{fontSize:clamp(28,5,40),fontWeight:900,margin:"0 0 10px",background:"linear-gradient(135deg,#4f46e5,#7c3aed)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>
+              <h1 style={{fontSize:"clamp(26px,5vw,38px)",fontWeight:900,margin:"0 0 10px",background:"linear-gradient(135deg,#4f46e5,#7c3aed)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>
                 Discover Research Papers
               </h1>
               <p style={{fontSize:16,color:"#6b7280"}}>Search millions of open-access papers — read, highlight & organize your research.</p>
             </div>
 
-            {/* Search box */}
+            {/* Search */}
             <div style={{background:"#f8faff",border:"1.5px solid #e0e7ff",borderRadius:18,padding:"20px 22px",marginBottom:28,boxShadow:"0 4px 24px rgba(99,102,241,0.07)"}}>
               <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
                 {TYPES.map(([v,l])=>(
                   <button key={v} onClick={()=>setSType(v)}
-                    style={{background:sType===v?"#4f46e5":"#fff",color:sType===v?"#fff":"#6b7280",border:"1.5px solid "+(sType===v?"#4f46e5":"#e0e7ff"),borderRadius:9,padding:"6px 14px",fontSize:13,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>
+                    style={{background:sType===v?"#4f46e5":"#fff",color:sType===v?"#fff":"#6b7280",
+                      border:"1.5px solid "+(sType===v?"#4f46e5":"#e0e7ff"),borderRadius:9,padding:"6px 14px",
+                      fontSize:13,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>
                     {l}
                   </button>
                 ))}
               </div>
               <div style={{display:"flex",gap:10}}>
-                <input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()}
+                <input value={query} onChange={e=>setQuery(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&doSearch()}
                   placeholder={sType==="doi"?"e.g. 10.1038/nature12373":sType==="author"?"Author name…":"Title or keyword…"}
-                  style={{flex:1,border:"1.5px solid #e0e7ff",borderRadius:11,padding:"12px 18px",fontSize:15,outline:"none",background:"#fff",color:"#1e1b4b",transition:"border 0.15s"}}
+                  style={{flex:1,border:"1.5px solid #e0e7ff",borderRadius:11,padding:"12px 18px",fontSize:15,
+                    outline:"none",background:"#fff",color:"#1e1b4b",transition:"border 0.15s"}}
                   onFocus={e=>e.target.style.borderColor="#6366f1"}
                   onBlur={e=>e.target.style.borderColor="#e0e7ff"}/>
-                <button onClick={doSearch} disabled={loading}
-                  style={{background:"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",border:"none",borderRadius:11,padding:"12px 26px",fontSize:15,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:8,boxShadow:"0 4px 14px rgba(99,102,241,0.3)",opacity:loading?0.7:1}}>
+                <button onClick={()=>doSearch()} disabled={loading}
+                  style={{background:"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",border:"none",
+                    borderRadius:11,padding:"12px 26px",fontSize:15,fontWeight:700,cursor:"pointer",
+                    display:"flex",alignItems:"center",gap:8,boxShadow:"0 4px 14px rgba(99,102,241,0.3)",
+                    opacity:loading?0.7:1,transition:"opacity 0.15s"}}>
                   <SearchIcon/>{loading?"Searching…":"Search"}
                 </button>
               </div>
+              {/* status */}
+              {loading&&(
+                <p style={{marginTop:12,fontSize:12.5,color:"#6366f1",display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{display:"inline-block",width:12,height:12,border:"2px solid #e0e7ff",borderTopColor:"#6366f1",borderRadius:"50%",animation:"spin .8s linear infinite"}}/>
+                  Connecting to Semantic Scholar API…
+                </p>
+              )}
             </div>
 
+            {/* Error */}
+            {error&&<ErrorBanner msg={error} onRetry={()=>doSearch(lastQuery.current.q,lastQuery.current.t)}/>}
+
             {/* Tabs */}
-            {results.length>0 && (
+            {results.length>0&&(
               <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #e0e7ff"}}>
-                {TABS.map(([v,l])=>(
+                {[["all",`All (${results.length})`],["oa",`Open Access / PDF (${oaCount})`]].map(([v,l])=>(
                   <button key={v} onClick={()=>setTab(v)}
-                    style={{background:"none",border:"none",borderBottom:tab===v?"2.5px solid #4f46e5":"2.5px solid transparent",color:tab===v?"#4f46e5":"#9ca3af",fontWeight:700,fontSize:13.5,padding:"8px 18px",cursor:"pointer",marginBottom:-2}}>
+                    style={{background:"none",border:"none",borderBottom:tab===v?"2.5px solid #4f46e5":"2.5px solid transparent",
+                      color:tab===v?"#4f46e5":"#9ca3af",fontWeight:700,fontSize:13.5,padding:"8px 18px",cursor:"pointer",marginBottom:-2}}>
                     {l}
                   </button>
                 ))}
               </div>
             )}
 
-            {/* Results */}
-            {error && <p style={{textAlign:"center",color:"#ef4444",padding:"30px 0",fontSize:15}}>{error}</p>}
-            {loading && <Skeleton/>}
-            {!loading && filtered.map(p=>(
+            {loading&&<Skeleton/>}
+            {!loading&&filtered.map(p=>(
               <PaperCard key={p.paperId} paper={p} onOpen={openModal} onSave={savePaper} saved={!!library.find(l=>l.paperId===p.paperId)}/>
             ))}
             {!loading&&!error&&results.length===0&&(
@@ -434,10 +464,11 @@ function App() {
                 <div style={{fontSize:52,marginBottom:14}}>🔍</div>
                 <p style={{fontSize:17,fontWeight:700,marginBottom:6}}>Search for research papers</p>
                 <p style={{fontSize:13}}>Try a keyword, author name, or paste a DOI</p>
+                <p style={{fontSize:12,marginTop:8,color:"#c4b5fd"}}>Powered by Semantic Scholar — millions of free papers</p>
               </div>
             )}
           </>
-        ) : (
+        ):(
           /* Library */
           <>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:28}}>
@@ -448,7 +479,7 @@ function App() {
               <div style={{textAlign:"center",padding:"70px 0",color:"#9ca3af"}}>
                 <div style={{fontSize:52,marginBottom:14}}>📂</div>
                 <p style={{fontSize:17,fontWeight:700,marginBottom:6}}>Your library is empty</p>
-                <p style={{fontSize:13}}>Save papers while searching to collect them here</p>
+                <p style={{fontSize:13}}>Save papers from search results to collect them here</p>
               </div>
             ):library.map(p=>(
               <PaperCard key={p.paperId} paper={p} onOpen={openModal} onSave={()=>{}} saved={true} onRemove={()=>removeLib(p.paperId)}/>
@@ -458,9 +489,9 @@ function App() {
       </main>
 
       {/* Graph Modal */}
-      {modal?.type==="graph" && (
-        <Modal title={`🔗 Related — ${(modal.paper.title||"").slice(0,48)}…`} onClose={()=>setModal(null)}>
-          {relLoad ? (
+      {modal?.type==="graph"&&(
+        <Modal title={`🔗 Related — ${(modal.paper.title||"").slice(0,46)}…`} onClose={()=>setModal(null)}>
+          {relLoad?(
             <div style={{textAlign:"center",padding:40}}><div className="spinner"/><p style={{marginTop:14,color:"#6366f1",fontWeight:600}}>Building citation graph…</p></div>
           ):(
             <>
@@ -474,7 +505,7 @@ function App() {
                       onMouseEnter={e=>e.currentTarget.style.background="#f8faff"}
                       onMouseLeave={e=>e.currentTarget.style.background=""}>
                       <div style={{fontWeight:600,fontSize:13,color:"#1e1b4b",marginBottom:3}}>{(p.title||"").slice(0,72)}</div>
-                      <div style={{fontSize:11.5,color:"#6b7280"}}>{p.authors?.[0]?.name} · {p.year} · ⭐ {p.citationCount||0} citations</div>
+                      <div style={{fontSize:11.5,color:"#6b7280"}}>{p.authors?.[0]?.name} · {p.year} · ⭐ {p.citationCount||0}</div>
                       {p.openAccessPdf?.url&&<span style={{background:"#dcfce7",color:"#166534",fontSize:10,padding:"2px 7px",borderRadius:20,fontWeight:600,marginTop:4,display:"inline-block"}}>PDF Available</span>}
                     </div>
                   ))}
@@ -487,7 +518,7 @@ function App() {
 
       {/* Mindmap Modal */}
       {modal?.type==="mindmap"&&(
-        <Modal title={`🧠 Mind Map — ${(modal.paper.title||"").slice(0,48)}…`} onClose={()=>setModal(null)}>
+        <Modal title={`🧠 Mind Map — ${(modal.paper.title||"").slice(0,46)}…`} onClose={()=>setModal(null)}>
           <MindMap paper={modal.paper}/>
           {modal.paper.abstract&&(
             <div style={{marginTop:18,background:"#f8faff",borderRadius:12,padding:16}}>
@@ -522,10 +553,7 @@ function App() {
   );
 }
 
-// tiny clamp helper
-function clamp(min,_,max){ return `clamp(${min}px,${_}vw,${max}px)`; }
-
-const root = ReactDOM.createRoot(document.getElementById("root"));
+const root=ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App/>);
 </script>
 </body>
