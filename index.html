@@ -1,0 +1,545 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+
+// ── Icons ──────────────────────────────────────────────────────────────────
+const Icon = ({ d, size = 18, color = "currentColor", ...p }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+    stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d={d} />
+  </svg>
+);
+const SearchIcon = () => <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />;
+const FolderIcon = () => <Icon d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />;
+const BookIcon = () => <Icon d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z" />;
+const ExternalIcon = () => <Icon d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />;
+const HighlightIcon = () => <Icon d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />;
+const MapIcon = () => <Icon d="M3 11l19-9-9 19-2-8-8-2z" />;
+const SaveIcon = () => <Icon d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8" />;
+const CloseIcon = () => <Icon d="M18 6L6 18M6 6l12 12" />;
+const GraphIcon = () => <Icon d="M18 20V10M12 20V4M6 20v-6" />;
+const ChevronDown = () => <Icon d="M6 9l6 6 6-6" size={16} />;
+const LockOpen = () => <Icon d="M7 11V7a5 5 0 0 1 9.9-1M21 21H3V11h18v10z" size={14} />;
+const PdfIcon = () => <Icon d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" size={14} />;
+const StarIcon = ({ filled }) => (
+  <svg width={14} height={14} viewBox="0 0 24 24" fill={filled ? "#f59e0b" : "none"}
+    stroke="#f59e0b" strokeWidth={2}><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
+);
+const TrashIcon = () => <Icon d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" size={15} />;
+const MenuIcon = () => <Icon d="M3 12h18M3 6h18M3 18h18" />;
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+const LS = {
+  get: k => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } },
+  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const COLORS = ["#FDE68A","#BBF7D0","#BFDBFE","#FCA5A5","#DDD6FE"];
+
+// ── Semantic Scholar API ───────────────────────────────────────────────────
+const S2 = "https://api.semanticscholar.org/graph/v1";
+const FIELDS = "paperId,title,authors,year,citationCount,referenceCount,openAccessPdf,externalIds,abstract,fieldsOfStudy,publicationTypes";
+
+async function searchPapers(query, type = "keyword") {
+  let url;
+  if (type === "doi") {
+    url = `${S2}/paper/DOI:${encodeURIComponent(query)}?fields=${FIELDS}`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("Not found");
+    const d = await r.json();
+    return [d];
+  }
+  if (type === "author") {
+    const ar = await fetch(`${S2}/author/search?query=${encodeURIComponent(query)}&fields=authorId,name&limit=5`);
+    const ad = await ar.json();
+    if (!ad.data?.length) return [];
+    const aid = ad.data[0].authorId;
+    const pr = await fetch(`${S2}/author/${aid}/papers?fields=${FIELDS}&limit=20`);
+    const pd = await pr.json();
+    return pd.data || [];
+  }
+  const r = await fetch(`${S2}/paper/search?query=${encodeURIComponent(query)}&fields=${FIELDS}&limit=20`);
+  const d = await r.json();
+  return d.data || [];
+}
+
+async function getRelated(paperId) {
+  const r = await fetch(`${S2}/paper/${paperId}/references?fields=${FIELDS}&limit=15`);
+  const d = await r.json();
+  return (d.data || []).map(x => x.citedPaper).filter(Boolean);
+}
+
+// ── Mini force graph ───────────────────────────────────────────────────────
+function ForceGraph({ center, related, onSelect }) {
+  const svgRef = useRef(null);
+  const animRef = useRef(null);
+  const [nodes, setNodes] = useState([]);
+  const [edges, setEdges] = useState([]);
+
+  useEffect(() => {
+    const w = 520, h = 380;
+    const cx = w / 2, cy = h / 2;
+    const all = [
+      { id: center.paperId, label: center.title?.slice(0, 30) + "…", author: center.authors?.[0]?.name || "", citations: center.citationCount || 0, main: true, x: cx, y: cy, vx: 0, vy: 0 },
+      ...related.slice(0, 12).map((p, i) => {
+        const angle = (2 * Math.PI * i) / Math.min(related.length, 12);
+        return { id: p.paperId, label: p.title?.slice(0, 25) + "…", author: p.authors?.[0]?.name || "", citations: p.citationCount || 0, main: false, x: cx + 140 * Math.cos(angle), y: cy + 120 * Math.sin(angle), vx: 0, vy: 0, paper: p };
+      })
+    ];
+    const edgeList = all.slice(1).map(n => ({ s: center.paperId, t: n.id }));
+    setNodes(all); setEdges(edgeList);
+
+    let ns = all.map(n => ({ ...n }));
+    const sim = () => {
+      for (let i = 0; i < 3; i++) {
+        ns.forEach((a, ai) => {
+          ns.forEach((b, bi) => {
+            if (ai === bi) return;
+            const dx = a.x - b.x, dy = a.y - b.y;
+            const d = Math.sqrt(dx * dx + dy * dy) || 1;
+            const f = 2000 / (d * d);
+            a.vx += f * dx / d; a.vy += f * dy / d;
+          });
+        });
+        edgeList.forEach(e => {
+          const a = ns.find(n => n.id === e.s), b = ns.find(n => n.id === e.t);
+          if (!a || !b) return;
+          const dx = b.x - a.x, dy = b.y - a.y;
+          const d = Math.sqrt(dx * dx + dy * dy) || 1;
+          const f = (d - 160) * 0.03;
+          a.vx += f * dx / d; a.vy += f * dy / d;
+          b.vx -= f * dx / d; b.vy -= f * dy / d;
+        });
+        ns.forEach(n => {
+          n.vx *= 0.7; n.vy *= 0.7;
+          n.x = Math.max(60, Math.min(w - 60, n.x + n.vx));
+          n.y = Math.max(40, Math.min(h - 40, n.y + n.vy));
+        });
+      }
+      setNodes([...ns]);
+      animRef.current = requestAnimationFrame(sim);
+    };
+    animRef.current = requestAnimationFrame(sim);
+    setTimeout(() => cancelAnimationFrame(animRef.current), 4000);
+    return () => cancelAnimationFrame(animRef.current);
+  }, [center.paperId]);
+
+  return (
+    <svg ref={svgRef} width="100%" viewBox="0 0 520 380" style={{ background: "#f8faff", borderRadius: 12 }}>
+      <defs>
+        <radialGradient id="cg"><stop offset="0%" stopColor="#6366f1" /><stop offset="100%" stopColor="#4f46e5" /></radialGradient>
+        <radialGradient id="ng"><stop offset="0%" stopColor="#e0e7ff" /><stop offset="100%" stopColor="#c7d2fe" /></radialGradient>
+      </defs>
+      {edges.map((e, i) => {
+        const a = nodes.find(n => n.id === e.s), b = nodes.find(n => n.id === e.t);
+        if (!a || !b) return null;
+        return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#a5b4fc" strokeWidth={1.5} strokeOpacity={0.6} />;
+      })}
+      {nodes.map(n => (
+        <g key={n.id} onClick={() => !n.main && onSelect(n.paper)} style={{ cursor: n.main ? "default" : "pointer" }}>
+          <circle cx={n.x} cy={n.y} r={n.main ? 32 : 22} fill={n.main ? "url(#cg)" : "url(#ng)"} stroke={n.main ? "#4f46e5" : "#a5b4fc"} strokeWidth={2} />
+          <text x={n.x} y={n.y - 6} textAnchor="middle" fontSize={n.main ? 7.5 : 6.5} fill={n.main ? "#fff" : "#3730a3"} fontWeight="600">
+            {(n.label || "").slice(0, 20)}
+          </text>
+          <text x={n.x} y={n.y + 5} textAnchor="middle" fontSize={5.5} fill={n.main ? "#c7d2fe" : "#6366f1"}>
+            {n.author?.split(" ").pop()}
+          </text>
+          <text x={n.x} y={n.y + 14} textAnchor="middle" fontSize={5} fill={n.main ? "#e0e7ff" : "#818cf8"}>
+            ⭐ {n.citations}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+// ── MindMap ────────────────────────────────────────────────────────────────
+function MindMap({ paper }) {
+  const sections = [
+    { label: "Title", children: [paper.title?.slice(0, 40) + "…"] },
+    { label: "Authors", children: paper.authors?.slice(0, 4).map(a => a.name) || [] },
+    { label: "Fields", children: paper.fieldsOfStudy || ["General"] },
+    { label: "Abstract", children: [paper.abstract?.slice(0, 80) + "…" || "N/A"] },
+    { label: "Citations", children: [`Cited ${paper.citationCount || 0} times`, `${paper.referenceCount || 0} references`] },
+    { label: "Year", children: [String(paper.year || "Unknown")] },
+  ];
+  const cx = 300, cy = 200, r1 = 90;
+  return (
+    <svg width="100%" viewBox="0 0 600 400" style={{ background: "#f8faff", borderRadius: 12 }}>
+      <defs>
+        <radialGradient id="mg"><stop offset="0%" stopColor="#6366f1" /><stop offset="100%" stopColor="#4338ca" /></radialGradient>
+      </defs>
+      <circle cx={cx} cy={cy} r={38} fill="url(#mg)" />
+      <text x={cx} y={cy - 4} textAnchor="middle" fontSize={8} fill="#fff" fontWeight="bold">PAPER</text>
+      <text x={cx} y={cy + 8} textAnchor="middle" fontSize={6} fill="#c7d2fe">MIND MAP</text>
+      {sections.map((s, i) => {
+        const angle = (2 * Math.PI * i) / sections.length - Math.PI / 2;
+        const nx = cx + r1 * Math.cos(angle), ny = cy + r1 * Math.sin(angle);
+        const lx = cx + (r1 + 80) * Math.cos(angle), ly = cy + (r1 + 80) * Math.sin(angle);
+        return (
+          <g key={i}>
+            <line x1={cx + 38 * Math.cos(angle)} y1={cy + 38 * Math.sin(angle)} x2={nx} y2={ny} stroke="#a5b4fc" strokeWidth={1.5} />
+            <circle cx={nx} cy={ny} r={22} fill="#e0e7ff" stroke="#6366f1" strokeWidth={1.5} />
+            <text x={nx} y={ny + 4} textAnchor="middle" fontSize={6.5} fill="#3730a3" fontWeight="700">{s.label}</text>
+            {s.children.slice(0, 2).map((c, ci) => {
+              const ca = angle + (ci - 0.5) * 0.4;
+              const lx2 = nx + 55 * Math.cos(ca), ly2 = ny + 40 * Math.sin(ca);
+              return (
+                <g key={ci}>
+                  <line x1={nx + 22 * Math.cos(ca)} y1={ny + 22 * Math.sin(ca)} x2={lx2} y2={ly2} stroke="#c7d2fe" strokeWidth={1} />
+                  <rect x={lx2 - 35} y={ly2 - 9} width={70} height={18} rx={6} fill="#fff" stroke="#e0e7ff" strokeWidth={1} />
+                  <text x={lx2} y={ly2 + 4} textAnchor="middle" fontSize={5.5} fill="#4b5563">{(c || "").slice(0, 18)}</text>
+                </g>
+              );
+            })}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ── PDF Viewer ─────────────────────────────────────────────────────────────
+function PdfViewer({ url, onClose, onSave }) {
+  const [hlColor, setHlColor] = useState("#FDE68A");
+  const [hlMode, setHlMode] = useState(false);
+  const iframeRef = useRef(null);
+  const proxyUrl = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(url)}`;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15,20,40,0.7)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: "92vw", height: "92vh", background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 25px 60px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column" }}>
+        {/* toolbar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 18px", background: "#1e1b4b", flexShrink: 0 }}>
+          <span style={{ color: "#e0e7ff", fontWeight: 700, fontSize: 15, flex: 1 }}>📄 PDF Viewer</span>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <span style={{ color: "#a5b4fc", fontSize: 12 }}>Highlight:</span>
+            {COLORS.map(c => (
+              <button key={c} onClick={() => { setHlColor(c); setHlMode(true); }}
+                style={{ width: 20, height: 20, borderRadius: "50%", background: c, border: hlColor === c && hlMode ? "2.5px solid #fff" : "2px solid transparent", cursor: "pointer" }} />
+            ))}
+            <button onClick={() => setHlMode(!hlMode)}
+              style={{ background: hlMode ? "#6366f1" : "#3730a3", color: "#fff", border: "none", borderRadius: 7, padding: "4px 10px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+              <HighlightIcon /> {hlMode ? "On" : "Off"}
+            </button>
+          </div>
+          <button onClick={() => window.open(url, "_blank")}
+            style={{ background: "#4f46e5", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+            <ExternalIcon /> External
+          </button>
+          <button onClick={onSave}
+            style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+            <SaveIcon /> Save
+          </button>
+          <button onClick={onClose} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
+          <iframe ref={iframeRef} src={proxyUrl} style={{ width: "100%", height: "100%", border: "none" }} title="PDF Viewer" />
+          <div style={{ position: "absolute", bottom: 14, right: 18, background: "#1e1b4b", color: "#c7d2fe", fontSize: 11, padding: "6px 12px", borderRadius: 8, opacity: 0.85 }}>
+            {hlMode ? `Highlight mode ON — color: ${hlColor}` : "Use browser text selection to highlight"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Paper Card ─────────────────────────────────────────────────────────────
+function PaperCard({ paper, onOpen, onSave, saved }) {
+  const hasPdf = !!paper.openAccessPdf?.url;
+  const isOA = hasPdf;
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e0e7ff", padding: "18px 20px", marginBottom: 14, boxShadow: "0 2px 12px rgba(99,102,241,0.06)", transition: "box-shadow 0.2s, transform 0.2s", cursor: "pointer" }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 8px 28px rgba(99,102,241,0.14)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 2px 12px rgba(99,102,241,0.06)"; e.currentTarget.style.transform = ""; }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+            {isOA && <span style={{ background: "#dcfce7", color: "#166534", fontSize: 11, padding: "2px 8px", borderRadius: 20, fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}><LockOpen />Open Access</span>}
+            {hasPdf && <span style={{ background: "#ede9fe", color: "#5b21b6", fontSize: 11, padding: "2px 8px", borderRadius: 20, fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}><PdfIcon />PDF</span>}
+            {paper.year && <span style={{ background: "#f1f5f9", color: "#475569", fontSize: 11, padding: "2px 8px", borderRadius: 20 }}>{paper.year}</span>}
+            {(paper.fieldsOfStudy || []).slice(0, 2).map(f => (
+              <span key={f} style={{ background: "#fef3c7", color: "#92400e", fontSize: 11, padding: "2px 8px", borderRadius: 20 }}>{f}</span>
+            ))}
+          </div>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#1e1b4b", lineHeight: 1.4, marginBottom: 5 }}>{paper.title}</h3>
+          <p style={{ margin: 0, fontSize: 12.5, color: "#6b7280", marginBottom: 6 }}>
+            {paper.authors?.slice(0, 3).map(a => a.name).join(", ")}{paper.authors?.length > 3 ? " et al." : ""}
+          </p>
+          {paper.abstract && <p style={{ margin: 0, fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>{paper.abstract.slice(0, 160)}…</p>}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, minWidth: 80 }}>
+          <div style={{ textAlign: "center", background: "#f0f4ff", borderRadius: 10, padding: "6px 12px" }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#4f46e5" }}>{paper.citationCount || 0}</div>
+            <div style={{ fontSize: 10, color: "#818cf8" }}>Citations</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+        <button onClick={() => onOpen(paper, "graph")}
+          style={{ background: "#eef2ff", color: "#4f46e5", border: "none", borderRadius: 8, padding: "7px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, transition: "background 0.15s" }}>
+          <GraphIcon /> Related Graph
+        </button>
+        <button onClick={() => onOpen(paper, "mindmap")}
+          style={{ background: "#f5f3ff", color: "#7c3aed", border: "none", borderRadius: 8, padding: "7px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+          <MapIcon /> Mind Map
+        </button>
+        {hasPdf && (
+          <button onClick={() => onOpen(paper, "pdf")}
+            style={{ background: "#ecfdf5", color: "#065f46", border: "none", borderRadius: 8, padding: "7px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+            <BookIcon /> Read PDF
+          </button>
+        )}
+        <button onClick={() => onSave(paper)}
+          style={{ background: saved ? "#fef9c3" : "#f8fafc", color: saved ? "#92400e" : "#64748b", border: "1px solid " + (saved ? "#fde68a" : "#e2e8f0"), borderRadius: 8, padding: "7px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+          <SaveIcon /> {saved ? "Saved" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Sidebar Modal ──────────────────────────────────────────────────────────
+function Modal({ title, onClose, children }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(15,20,40,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: "min(700px,95vw)", maxHeight: "90vh", background: "#fff", borderRadius: 18, boxShadow: "0 30px 70px rgba(0,0,0,0.2)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", padding: "16px 22px", borderBottom: "1px solid #e0e7ff", background: "#f8faff" }}>
+          <span style={{ fontWeight: 800, fontSize: 16, color: "#1e1b4b", flex: 1 }}>{title}</span>
+          <button onClick={onClose} style={{ background: "#f1f5f9", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: "#64748b" }}><CloseIcon /></button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: 22 }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ───────────────────────────────────────────────────────────────
+export default function App() {
+  const [query, setQuery] = useState("");
+  const [searchType, setSearchType] = useState("keyword");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState("all");
+  const [modal, setModal] = useState(null); // { type, paper, related }
+  const [showPdf, setShowPdf] = useState(null);
+  const [library, setLibrary] = useState(() => LS.get("rp_library"));
+  const [view, setView] = useState("search"); // search | library
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [relatedLoading, setRelatedLoading] = useState(false);
+
+  const saveLibrary = papers => { setLibrary(papers); LS.set("rp_library", papers); };
+
+  const handleSearch = async () => {
+    if (!query.trim()) return;
+    setLoading(true); setError(""); setResults([]);
+    try {
+      const data = await searchPapers(query.trim(), searchType);
+      setResults(data.filter(p => p && p.title));
+    } catch (e) { setError("No results found. Try a different query."); }
+    setLoading(false);
+  };
+
+  const openModal = async (paper, type) => {
+    if (type === "pdf") { setShowPdf(paper.openAccessPdf.url); return; }
+    if (type === "graph") {
+      setModal({ type, paper, related: [] });
+      setRelatedLoading(true);
+      try {
+        const rel = await getRelated(paper.paperId);
+        setModal(m => ({ ...m, related: rel }));
+      } catch {}
+      setRelatedLoading(false);
+    } else {
+      setModal({ type, paper, related: [] });
+    }
+  };
+
+  const savePaper = paper => {
+    if (!library.find(p => p.paperId === paper.paperId))
+      saveLibrary([...library, paper]);
+  };
+  const removePaper = id => saveLibrary(library.filter(p => p.paperId !== id));
+
+  const filtered = tab === "all" ? results : tab === "oa" ? results.filter(p => p.openAccessPdf?.url) : results.filter(p => p.openAccessPdf?.url);
+
+  const TYPE_OPTIONS = [
+    { v: "keyword", l: "Title / Keyword" },
+    { v: "author", l: "Author" },
+    { v: "doi", l: "DOI" },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#fff", fontFamily: "'Inter', system-ui, sans-serif", color: "#1e1b4b" }}>
+      {/* ── Header ── */}
+      <header style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(255,255,255,0.95)", borderBottom: "1px solid #e0e7ff", backdropFilter: "blur(12px)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 20px", height: 62, display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+            <div style={{ width: 34, height: 34, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16 }}>🔬</div>
+            <span style={{ fontWeight: 800, fontSize: 18, color: "#1e1b4b", letterSpacing: -0.5 }}>ResearchLens</span>
+          </div>
+          <div style={{ flex: 1 }} />
+          <nav style={{ display: "flex", gap: 6 }}>
+            {["search", "library"].map(v => (
+              <button key={v} onClick={() => setView(v)}
+                style={{ background: view === v ? "#eef2ff" : "transparent", color: view === v ? "#4f46e5" : "#6b7280", border: "none", borderRadius: 9, padding: "7px 16px", fontWeight: 600, fontSize: 13.5, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, transition: "all 0.15s" }}>
+                {v === "search" ? <><SearchIcon /> Search</> : <><FolderIcon /> Library <span style={{ background: "#4f46e5", color: "#fff", borderRadius: 20, padding: "1px 7px", fontSize: 11 }}>{library.length}</span></>}
+              </button>
+            ))}
+          </nav>
+        </div>
+      </header>
+
+      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 20px" }}>
+        {view === "search" ? (
+          <>
+            {/* ── Hero ── */}
+            <div style={{ textAlign: "center", marginBottom: 38 }}>
+              <h1 style={{ fontSize: 36, fontWeight: 900, margin: "0 0 10px", background: "linear-gradient(135deg,#4f46e5,#7c3aed)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                Discover Research Papers
+              </h1>
+              <p style={{ fontSize: 16, color: "#6b7280", margin: 0 }}>Search millions of open-access papers — read, highlight, and organize your research.</p>
+            </div>
+
+            {/* ── Search Box ── */}
+            <div style={{ background: "#f8faff", border: "1.5px solid #e0e7ff", borderRadius: 18, padding: "20px 22px", marginBottom: 28, boxShadow: "0 4px 24px rgba(99,102,241,0.07)" }}>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  {TYPE_OPTIONS.map(o => (
+                    <button key={o.v} onClick={() => setSearchType(o.v)}
+                      style={{ background: searchType === o.v ? "#4f46e5" : "#fff", color: searchType === o.v ? "#fff" : "#6b7280", border: "1.5px solid " + (searchType === o.v ? "#4f46e5" : "#e0e7ff"), borderRadius: 9, padding: "6px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}>
+                      {o.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input value={query} onChange={e => setQuery(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleSearch()}
+                  placeholder={searchType === "doi" ? "Enter DOI e.g. 10.1038/nature12373" : searchType === "author" ? "Enter author name…" : "Search by title or keyword…"}
+                  style={{ flex: 1, border: "1.5px solid #e0e7ff", borderRadius: 11, padding: "12px 18px", fontSize: 15, outline: "none", background: "#fff", color: "#1e1b4b", transition: "border 0.15s" }}
+                  onFocus={e => e.target.style.borderColor = "#6366f1"}
+                  onBlur={e => e.target.style.borderColor = "#e0e7ff"} />
+                <button onClick={handleSearch} disabled={loading}
+                  style={{ background: "linear-gradient(135deg,#4f46e5,#7c3aed)", color: "#fff", border: "none", borderRadius: 11, padding: "12px 26px", fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 14px rgba(99,102,241,0.3)", opacity: loading ? 0.7 : 1, transition: "opacity 0.15s" }}>
+                  <SearchIcon /> {loading ? "Searching…" : "Search"}
+                </button>
+              </div>
+            </div>
+
+            {/* ── Tabs ── */}
+            {results.length > 0 && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 20, borderBottom: "2px solid #e0e7ff", paddingBottom: 0 }}>
+                {[["all", `All (${results.length})`], ["oa", `Open Access (${results.filter(p => p.openAccessPdf?.url).length})`], ["pdf", `Has PDF (${results.filter(p => p.openAccessPdf?.url).length})`]].map(([v, l]) => (
+                  <button key={v} onClick={() => setTab(v)}
+                    style={{ background: "none", border: "none", borderBottom: tab === v ? "2.5px solid #4f46e5" : "2.5px solid transparent", color: tab === v ? "#4f46e5" : "#9ca3af", fontWeight: 700, fontSize: 13.5, padding: "8px 16px", cursor: "pointer", marginBottom: -2, transition: "all 0.15s" }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* ── Results ── */}
+            {error && <div style={{ textAlign: "center", color: "#ef4444", padding: "30px 0", fontSize: 15 }}>{error}</div>}
+            {loading && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {[1, 2, 3].map(i => (
+                  <div key={i} style={{ background: "#f8faff", borderRadius: 14, height: 130, border: "1px solid #e0e7ff", animation: "pulse 1.4s ease-in-out infinite" }} />
+                ))}
+              </div>
+            )}
+            {!loading && filtered.map(p => (
+              <PaperCard key={p.paperId} paper={p} onOpen={openModal} onSave={savePaper} saved={!!library.find(l => l.paperId === p.paperId)} />
+            ))}
+            {!loading && results.length === 0 && !error && (
+              <div style={{ textAlign: "center", padding: "60px 0", color: "#9ca3af" }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>🔍</div>
+                <p style={{ fontSize: 16, fontWeight: 600 }}>Search for research papers above</p>
+                <p style={{ fontSize: 13 }}>Try searching by keyword, author name, or DOI</p>
+              </div>
+            )}
+          </>
+        ) : (
+          /* ── Library ── */
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
+              <h2 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#1e1b4b" }}>📁 My Research Library</h2>
+              <span style={{ background: "#eef2ff", color: "#4f46e5", borderRadius: 20, padding: "3px 12px", fontWeight: 700, fontSize: 14 }}>{library.length} papers</span>
+            </div>
+            {library.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "60px 0", color: "#9ca3af" }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>📂</div>
+                <p style={{ fontSize: 16, fontWeight: 600 }}>Your library is empty</p>
+                <p style={{ fontSize: 13 }}>Save papers while searching to collect them here</p>
+              </div>
+            ) : (
+              library.map(p => (
+                <div key={p.paperId} style={{ position: "relative" }}>
+                  <PaperCard paper={p} onOpen={openModal} onSave={() => {}} saved={true} />
+                  <button onClick={() => removePaper(p.paperId)}
+                    style={{ position: "absolute", top: 16, right: 16, background: "#fee2e2", color: "#ef4444", border: "none", borderRadius: 8, padding: "5px 9px", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
+                    <TrashIcon /> Remove
+                  </button>
+                </div>
+              ))
+            )}
+          </>
+        )}
+      </main>
+
+      {/* ── Modals ── */}
+      {modal?.type === "graph" && (
+        <Modal title={`🔗 Related Papers — ${modal.paper.title?.slice(0, 50)}…`} onClose={() => setModal(null)}>
+          {relatedLoading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#6366f1" }}>Loading citation graph…</div>
+          ) : (
+            <>
+              <ForceGraph center={modal.paper} related={modal.related} onSelect={p => { setModal(null); setTimeout(() => openModal(p, "graph"), 100); }} />
+              {modal.related.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <h4 style={{ fontSize: 13.5, fontWeight: 700, color: "#4b5563", marginBottom: 10 }}>Referenced Papers</h4>
+                  {modal.related.slice(0, 8).map(p => (
+                    <div key={p.paperId} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #e0e7ff", marginBottom: 8, display: "flex", alignItems: "center", gap: 10, cursor: "pointer", transition: "background 0.15s" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "#f8faff"}
+                      onMouseLeave={e => e.currentTarget.style.background = ""}
+                      onClick={() => { setModal(null); setTimeout(() => openModal(p, "graph"), 100); }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: "#1e1b4b" }}>{p.title?.slice(0, 70)}</div>
+                        <div style={{ fontSize: 11.5, color: "#6b7280" }}>{p.authors?.[0]?.name} · {p.year} · ⭐ {p.citationCount || 0}</div>
+                      </div>
+                      {p.openAccessPdf?.url && <span style={{ background: "#dcfce7", color: "#166534", fontSize: 11, padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}>PDF</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </Modal>
+      )}
+
+      {modal?.type === "mindmap" && (
+        <Modal title={`🧠 Mind Map — ${modal.paper.title?.slice(0, 50)}…`} onClose={() => setModal(null)}>
+          <MindMap paper={modal.paper} />
+          {modal.paper.abstract && (
+            <div style={{ marginTop: 18, background: "#f8faff", borderRadius: 12, padding: 16 }}>
+              <h4 style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: "#4b5563" }}>Abstract</h4>
+              <p style={{ margin: 0, fontSize: 13, color: "#374151", lineHeight: 1.7 }}>{modal.paper.abstract}</p>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {showPdf && (
+        <PdfViewer url={showPdf} onClose={() => setShowPdf(null)}
+          onSave={() => { const p = results.find(r => r.openAccessPdf?.url === showPdf) || library.find(r => r.openAccessPdf?.url === showPdf); if (p) savePaper(p); }} />
+      )}
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        * { box-sizing: border-box; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 10px; }
+      `}</style>
+    </div>
+  );
+}
