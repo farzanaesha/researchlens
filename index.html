@@ -24,8 +24,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:#fff;color:#1e1b4b}
 .pdf-page-wrap canvas{display:block}
 .hl-layer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
 .hl-rect{position:absolute;border-radius:2px;opacity:0.38;pointer-events:auto;cursor:pointer}
-.text-layer{position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden;user-select:text;line-height:1}
-.text-layer span{position:absolute;color:transparent;cursor:text;transform-origin:0% 0%}
+.text-layer{position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden;line-height:1;pointer-events:none}
+.text-layer.hl-active{pointer-events:auto;user-select:text;-webkit-user-select:text;cursor:text}
+.text-layer span{position:absolute;color:transparent;transform-origin:0% 0%;white-space:pre;pointer-events:auto;user-select:text;-webkit-user-select:text;padding:0;margin:0;display:inline-block}
 </style>
 </head>
 <body>
@@ -173,45 +174,42 @@ function PdfViewer({paper,onClose,onSave}){
         await task.promise;
         renderTask.current=null;
 
-        // build text layer — precise positioning, no overlap
+        // build tight text layer — each span sized only to its glyphs
         const tl=textLayerRef.current;
         if(!tl)return;
         tl.innerHTML="";
         tl.style.width=vp.width+"px";
         tl.style.height=vp.height+"px";
         const tc=await pg.getTextContent();
-        const canvasW=vp.width,canvasH=vp.height;
         tc.items.forEach(item=>{
           if(!item.str||!item.str.trim())return;
-          // apply viewport transform to get canvas coords
           const tx=pdfjsLib.Util.transform(vp.transform,item.transform);
-          // tx = [scaleX, skewY, skewX, scaleY, translateX, translateY]
           const angle=Math.atan2(tx[1],tx[0]);
-          const scaleX=Math.sqrt(tx[0]*tx[0]+tx[1]*tx[1]);
-          const scaleY=Math.sqrt(tx[2]*tx[2]+tx[3]*tx[3]);
-          const fh=Math.abs(scaleY)||12;
-          const fw=item.width*scaleX;
+          // font height from the vertical scale component
+          const fh=Math.abs(Math.sqrt(tx[2]*tx[2]+tx[3]*tx[3]))||12;
           const x=tx[4];
-          const y=tx[5]-fh; // top of glyph
-          // clamp to canvas bounds — prevents overflow bleed into neighbour lines
-          if(x<0||y<0||x>canvasW||y>canvasH)return;
+          const y=tx[5]-fh;
+          // skip off-canvas items
+          if(y+fh<0||y>vp.height||x>vp.width||x+item.width*scale<0)return;
+          // natural render width at this font size (approx 0.6em per char)
+          const naturalW=item.str.length*fh*0.55;
+          // desired width from PDF metrics
+          const desiredW=item.width*(vp.scale||scale);
+          // scaleX to stretch/compress text to match PDF layout — clamped tightly
+          const sx=naturalW>0&&desiredW>0?Math.min(Math.max(desiredW/naturalW,0.2),2.5):1;
           const span=document.createElement("span");
           span.textContent=item.str;
-          // use explicit width + scaleX only if width is reasonable
-          const charW=item.str.length>0?fw/item.str.length:fh*0.6;
-          const naturalW=item.str.length*charW;
-          const sx=naturalW>0&&fw>0?fw/naturalW:1;
+          // width = natural width only (pre-scaleX), so the span doesn't bleed
+          // into adjacent lines. scaleX handles the actual visual stretch.
           span.style.cssText=`
             left:${x}px;
             top:${y}px;
             font-size:${fh}px;
             line-height:${fh}px;
-            height:${fh}px;
-            width:${fw>0?fw+"px":"auto"};
-            transform:rotate(${angle}rad) scaleX(${Math.min(Math.max(sx,0.1),4)});
+            height:${fh*1.1}px;
+            width:${naturalW}px;
+            transform:rotate(${angle}rad) scaleX(${sx});
             transform-origin:0% 0%;
-            white-space:pre;
-            overflow:hidden;
           `;
           tl.appendChild(span);
         });
@@ -330,10 +328,7 @@ function PdfViewer({paper,onClose,onSave}){
               <div style={{position:"relative",boxShadow:"0 4px 24px rgba(0,0,0,0.3)",background:"#fff",display:"inline-block"}}>
                 <canvas ref={canvasRef}/>
                 {/* real text layer — enables actual text selection */}
-                <div ref={textLayerRef} className="text-layer"
-                  style={{cursor:hlMode?"text":"default",
-                    userSelect:hlMode?"text":"none",
-                    WebkitUserSelect:hlMode?"text":"none"}}/>
+                <div ref={textLayerRef} className={`text-layer${hlMode?" hl-active":""}`}/>
                 {/* highlight rectangles overlay */}
                 <div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none",overflow:"hidden"}}>
                   {pageHls.map(h=>
